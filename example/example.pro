@@ -1,5 +1,4 @@
 ADS_OUT_ROOT = $${OUT_PWD}/..
-
 QT += core gui widgets
 
 TARGET = Example1
@@ -10,6 +9,7 @@ CONFIG += debug_and_release
 adsBuildStatic {
     DEFINES += ADS_STATIC
 }
+
 
 DEFINES += QT_DEPRECATED_WARNINGS
 
@@ -23,6 +23,7 @@ HEADERS += \
 FORMS += \
         MainWindow.ui
         
+
 
 LIBS += -L$${ADS_OUT_ROOT}/lib
 
