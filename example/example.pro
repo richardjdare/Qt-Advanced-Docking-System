@@ -25,6 +25,7 @@ FORMS += \
         
 
 
+
 LIBS += -L$${ADS_OUT_ROOT}/lib
 
 # Dependency: AdvancedDockingSystem (shared)
