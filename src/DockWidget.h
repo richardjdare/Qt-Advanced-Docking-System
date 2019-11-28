@@ -250,7 +250,8 @@ public:
 	QWidget* widget() const;
 
 	/**
-	 * Returns the title bar widget of this dock widget
+	 * Returns the tab widget of this dock widget that is shown in the dock
+	 * area title bar
 	 */
 	CDockWidgetTab* tabWidget() const;
 
@@ -392,13 +393,13 @@ public:
 	QSize toolBarIconSize(eState State) const;
 
 
-	#ifndef QT_NO_TOOLTIP
+#ifndef QT_NO_TOOLTIP
 	/**
 	 * This is function sets text tooltip for title bar widget 
 	 * and tooltip for toggle view action
 	 */
 	void setTabToolTip(const QString &text);
-	#endif
+#endif
 
 public: // reimplements QFrame -----------------------------------------------
 	/**
@@ -412,6 +413,11 @@ public slots:
 	 * The toogleViewAction triggers this slot
 	 */
 	void toggleView(bool Open = true);
+
+	/**
+	 * This function will make a docked widget floating
+	 */
+	void setFloating();
 
 signals:
 	/**

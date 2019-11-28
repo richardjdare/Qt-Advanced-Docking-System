@@ -52,6 +52,8 @@
 #include "DockWidget.h"
 #include "ads_globals.h"
 #include "DockAreaWidget.h"
+#include "IconProvider.h"
+
 
 
 namespace ads
@@ -74,6 +76,7 @@ struct DockManagerPrivate
 	QMenu* ViewMenu;
 	CDockManager::eViewMenuInsertionOrder MenuInsertionOrder = CDockManager::MenuAlphabeticallySorted;
 	bool RestoringState = false;
+	QVector<CFloatingDockContainer*> UninitializedFloatingWidgets;
 
 	/**
 	 * Private data constructor
@@ -559,6 +562,48 @@ bool CDockManager::restoreState(const QByteArray &state, int version)
 
 
 //============================================================================
+CFloatingDockContainer* CDockManager::addDockWidgetFloating(CDockWidget* Dockwidget)
+{
+	d->DockWidgetsMap.insert(Dockwidget->objectName(), Dockwidget);
+	CDockAreaWidget* OldDockArea = Dockwidget->dockAreaWidget();
+	if (OldDockArea)
+	{
+		OldDockArea->removeDockWidget(Dockwidget);
+	}
+
+	Dockwidget->setDockManager(this);
+	CFloatingDockContainer* FloatingWidget = new CFloatingDockContainer(Dockwidget);
+	FloatingWidget->resize(Dockwidget->size());
+	if (isVisible())
+	{
+		FloatingWidget->show();
+	}
+	else
+	{
+		d->UninitializedFloatingWidgets.append(FloatingWidget);
+	}
+	return FloatingWidget;
+}
+
+
+//============================================================================
+void CDockManager::showEvent(QShowEvent *event)
+{
+	Super::showEvent(event);
+	if (d->UninitializedFloatingWidgets.empty())
+	{
+		return;
+	}
+
+	for (auto FloatingWidget : d->UninitializedFloatingWidgets)
+	{
+		FloatingWidget->show();
+	}
+	d->UninitializedFloatingWidgets.clear();
+}
+
+
+//============================================================================
 CDockAreaWidget* CDockManager::addDockWidget(DockWidgetArea area,
 	CDockWidget* Dockwidget, CDockAreaWidget* DockAreaWidget)
 {
@@ -785,6 +830,14 @@ void CDockManager::setConfigFlags(const ConfigFlags Flags)
 void CDockManager::setConfigFlag(eConfigFlag Flag, bool On)
 {
 	internal::setFlag(StaticConfigFlags, Flag, On);
+}
+
+
+//===========================================================================
+CIconProvider& CDockManager::iconProvider()
+{
+	static CIconProvider Instance;
+	return Instance;
 }
 
 

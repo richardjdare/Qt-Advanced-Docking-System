@@ -50,6 +50,7 @@
 #include <QWidgetAction>
 #include <QComboBox>
 #include <QInputDialog>
+#include <QRubberBand>
 
 #include <QMap>
 #include <QElapsedTimer>
@@ -57,6 +58,7 @@
 #include "DockManager.h"
 #include "DockWidget.h"
 #include "DockAreaWidget.h"
+#include "FloatingDockContainer.h"
 
 
 //============================================================================
@@ -226,8 +228,17 @@ void MainWindowPrivate::createContent()
 	auto BottomDockArea = DockManager->addDockWidget(ads::BottomDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), RighDockArea);
 	DockManager->addDockWidget(ads::RightDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), RighDockArea);
 	DockManager->addDockWidget(ads::CenterDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), BottomDockArea);
-    //DockManager->addDockWidget(ads::CenterDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), BottomDockArea);
-    //DockManager->addDockWidget(ads::CenterDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), BottomDockArea);
+
+	// Test creation of floating dock widgets
+	DockWidget = createFileSystemTreeDockWidget(ViewMenu);
+    auto FloatingWidget = DockManager->addDockWidgetFloating(DockWidget);
+    FloatingWidget->move(QPoint(20, 20));
+    FloatingWidget = DockManager->addDockWidgetFloating(createLongTextLabelDockWidget(ViewMenu));
+    FloatingWidget->move(QPoint(100, 100));
+
+    auto Action = ui.menuView->addAction(QString("Set %1 floating").arg(DockWidget->windowTitle()));
+    DockWidget->connect(Action, SIGNAL(triggered()), SLOT(setFloating()));
+
 
 	for (auto DockWidget : DockManager->dockWidgetsMap())
 	{
@@ -310,9 +321,13 @@ CMainWindow::CMainWindow(QWidget *parent) :
 	// a QToolButton instead of a QPushButton
 	// CDockManager::setConfigFlags(CDockManager::configFlags() | CDockManager::TabCloseButtonIsToolButton);
 
-	// uncomment the following line if you wand a fixed tab width that does
+    // uncomment the following line if you want a fixed tab width that does
 	// not change if the visibility of the close button changes
-	// CDockManager::setConfigFlag(CDockManager::RetainTabSizeWhenCloseButtonHidden, true);
+    // CDockManager::setConfigFlag(CDockManager::RetainTabSizeWhenCloseButtonHidden, true);
+
+    // uncomment the follwing line if you want to use non opaque undocking and splitter
+    // moevements
+    // CDockManager::setConfigFlags(CDockManager::DefaultNonOpaqueConfig);
 
 	// Now create the dock manager and its content
 	d->DockManager = new CDockManager(this);
@@ -328,7 +343,7 @@ CMainWindow::CMainWindow(QWidget *parent) :
 	// Default window geometry
     resize(1280, 720);
 
-	d->restoreState();
+	//d->restoreState();
 	d->restorePerspectives();
 }
 

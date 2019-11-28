@@ -81,6 +81,12 @@ namespace ads
 {
 static unsigned int zOrderCounter = 0;
 
+enum eDropMode
+{
+	DropModeIntoArea,///< drop widget into a dock area
+	DropModeIntoContainer,///< drop into container
+	DropModeInvalid///< invalid mode - do not drop
+};
 
 /**
  * Converts dock area ID to an index for array access
@@ -165,10 +171,28 @@ public:
 		CDockAreaWidget* TargetArea, DockWidgetArea area);
 
 	/**
+	 * Moves the dock widget or dock area given in Widget parameter to a
+	 * new dock widget area
+	 */
+	void moveToNewSection(QWidget* Widget, CDockAreaWidget* TargetArea, DockWidgetArea area);
+
+	/**
+	 * Moves the dock widget or dock area given in Widget parameter to a
+	 * a dock area in container
+	 */
+	void moveToContainer(QWidget* Widgett, DockWidgetArea area);
+
+	/**
 	 * Creates a new tab for a widget dropped into the center of a section
 	 */
 	void dropIntoCenterOfSection(CFloatingDockContainer* FloatingWidget,
 		CDockAreaWidget* TargetArea);
+
+	/**
+	 * Creates a new tab for a widget dropped into the center of a section
+	 */
+	void moveIntoCenterOfSection(QWidget* Widget, CDockAreaWidget* TargetArea);
+
 
 	/**
 	 * Adds new dock areas to the internal dock area list
@@ -215,6 +239,11 @@ public:
 	 * Helper function for recursive dumping of layout
 	 */
 	void dumpRecursive(int level, QWidget* widget);
+
+	/**
+	 * Calculate the drop mode from the given target position
+	 */
+	eDropMode getDropMode(const QPoint& TargetPos);
 
 	/**
 	 * Initializes the visible dock area count variable if it is not initialized
@@ -295,6 +324,46 @@ DockContainerWidgetPrivate::DockContainerWidgetPrivate(CDockContainerWidget* _pu
 
 
 //============================================================================
+eDropMode DockContainerWidgetPrivate::getDropMode(const QPoint& TargetPos)
+{
+	CDockAreaWidget* DockArea = _this->dockAreaAt(TargetPos);
+	auto dropArea = InvalidDockWidgetArea;
+	auto ContainerDropArea = DockManager->containerOverlay()->dropAreaUnderCursor();
+
+	if (DockArea)
+	{
+		auto dropOverlay = DockManager->dockAreaOverlay();
+		dropOverlay->setAllowedAreas(AllDockAreas);
+		dropArea = dropOverlay->showOverlay(DockArea);
+		if (ContainerDropArea != InvalidDockWidgetArea &&
+			ContainerDropArea != dropArea)
+		{
+			dropArea = InvalidDockWidgetArea;
+		}
+
+		if (dropArea != InvalidDockWidgetArea)
+		{
+            ADS_PRINT("Dock Area Drop Content: " << dropArea);
+            return DropModeIntoArea;
+		}
+	}
+
+	// mouse is over container
+	if (InvalidDockWidgetArea == dropArea)
+	{
+		dropArea = ContainerDropArea;
+        ADS_PRINT("Container Drop Content: " << dropArea);
+		if (dropArea != InvalidDockWidgetArea)
+		{
+			return DropModeIntoContainer;
+		}
+	}
+
+	return DropModeInvalid;
+}
+
+
+//============================================================================
 void DockContainerWidgetPrivate::onVisibleDockAreaCountChanged()
 {
 	auto TopLevelDockArea = _this->topLevelDockArea();
@@ -322,8 +391,6 @@ void DockContainerWidgetPrivate::dropIntoContainer(CFloatingDockContainer* Float
 	CDockContainerWidget* FloatingDockContainer = FloatingWidget->dockContainer();
 	auto NewDockAreas = FloatingDockContainer->findChildren<CDockAreaWidget*>(
 		QString(), Qt::FindChildrenRecursively);
-	CDockWidget* SingleDroppedDockWidget = FloatingDockContainer->topLevelDockWidget();
-	CDockWidget* SingleDockWidget = _this->topLevelDockWidget();
 	QSplitter* Splitter = RootSplitter;
 
 	if (DockAreas.count() <= 1)
@@ -360,8 +427,6 @@ void DockContainerWidgetPrivate::dropIntoContainer(CFloatingDockContainer* Float
 	RootSplitter = Splitter;
 	addDockAreasToList(NewDockAreas);
 	FloatingWidget->deleteLater();
-	CDockWidget::emitTopLevelEventForWidget(SingleDroppedDockWidget, false);
-	CDockWidget::emitTopLevelEventForWidget(SingleDockWidget, false);
 
 	// If we dropped the floating widget into the main dock container that does
 	// not contain any dock widgets, then splitter is invisible and we need to
@@ -504,6 +569,128 @@ void DockContainerWidgetPrivate::dropIntoSection(CFloatingDockContainer* Floatin
 
 
 //============================================================================
+void DockContainerWidgetPrivate::moveIntoCenterOfSection(QWidget* Widget, CDockAreaWidget* TargetArea)
+{
+	auto DroppedDockWidget = qobject_cast<CDockWidget*>(Widget);
+	auto DroppedArea = qobject_cast<CDockAreaWidget*>(Widget);
+
+	if (DroppedDockWidget)
+	{
+		CDockAreaWidget* OldDockArea = DroppedDockWidget->dockAreaWidget();
+		if (OldDockArea)
+		{
+			OldDockArea->removeDockWidget(DroppedDockWidget);
+		}
+		TargetArea->insertDockWidget(0, DroppedDockWidget, false);
+	}
+	else
+	{
+		QList<CDockWidget*> NewDockWidgets = DroppedArea->dockWidgets();
+		int NewCurrentIndex = DroppedArea->currentIndex();
+		for (int i = 0; i < NewDockWidgets.count(); ++i)
+		{
+			CDockWidget* DockWidget = NewDockWidgets[i];
+			TargetArea->insertDockWidget(i, DockWidget, false);
+		}
+		TargetArea->setCurrentIndex(NewCurrentIndex);
+		DroppedArea->dockContainer()->removeDockArea(DroppedArea);
+		DroppedArea->deleteLater();
+	}
+
+	TargetArea->updateTitleBarVisibility();
+	return;
+}
+
+
+//============================================================================
+void DockContainerWidgetPrivate::moveToNewSection(QWidget* Widget, CDockAreaWidget* TargetArea, DockWidgetArea area)
+{
+	// Dropping into center means all dock widgets in the dropped floating
+	// widget will become tabs of the drop area
+	if (CenterDockWidgetArea == area)
+	{
+		moveIntoCenterOfSection(Widget, TargetArea);
+		return;
+	}
+
+
+	CDockWidget* DroppedDockWidget = qobject_cast<CDockWidget*>(Widget);
+	CDockAreaWidget* DroppedDockArea = qobject_cast<CDockAreaWidget*>(Widget);
+	CDockAreaWidget* NewDockArea;
+	if (DroppedDockWidget)
+	{
+		NewDockArea = new CDockAreaWidget(DockManager, _this);
+		CDockAreaWidget* OldDockArea = DroppedDockWidget->dockAreaWidget();
+		if (OldDockArea)
+		{
+			OldDockArea->removeDockWidget(DroppedDockWidget);
+		}
+		NewDockArea->addDockWidget(DroppedDockWidget);
+	}
+	else
+	{
+		DroppedDockArea->dockContainer()->removeDockArea(DroppedDockArea);
+		NewDockArea = DroppedDockArea;
+	}
+
+	auto InsertParam = internal::dockAreaInsertParameters(area);
+	QSplitter* TargetAreaSplitter = internal::findParent<QSplitter*>(TargetArea);
+	int AreaIndex = TargetAreaSplitter->indexOf(TargetArea);
+	auto Sizes = TargetAreaSplitter->sizes();
+	if (TargetAreaSplitter->orientation() == InsertParam.orientation())
+	{
+		int TargetAreaSize = (InsertParam.orientation() == Qt::Horizontal) ? TargetArea->width() : TargetArea->height();
+		TargetAreaSplitter->insertWidget(AreaIndex + InsertParam.insertOffset(), NewDockArea);
+		int Size = (TargetAreaSize - TargetAreaSplitter->handleWidth()) / 2;
+		Sizes[AreaIndex] = Size;
+		Sizes.insert(AreaIndex, Size);
+	}
+	else
+	{
+		auto Sizes = TargetAreaSplitter->sizes();
+		int TargetAreaSize = (InsertParam.orientation() == Qt::Horizontal) ? TargetArea->width() : TargetArea->height();
+		QSplitter* NewSplitter = newSplitter(InsertParam.orientation());
+		NewSplitter->addWidget(TargetArea);
+		insertWidgetIntoSplitter(NewSplitter, NewDockArea, InsertParam.append());
+		int Size = TargetAreaSize / 2;
+		NewSplitter->setSizes({Size, Size});
+		TargetAreaSplitter->insertWidget(AreaIndex, NewSplitter);
+	}
+	TargetAreaSplitter->setSizes(Sizes);
+
+	addDockAreasToList({NewDockArea});
+}
+
+
+//============================================================================
+void DockContainerWidgetPrivate::moveToContainer(QWidget* Widget, DockWidgetArea area)
+{
+	CDockWidget* DroppedDockWidget = qobject_cast<CDockWidget*>(Widget);
+	CDockAreaWidget* DroppedDockArea = qobject_cast<CDockAreaWidget*>(Widget);
+	CDockAreaWidget* NewDockArea;
+
+	if (DroppedDockWidget)
+	{
+		NewDockArea = new CDockAreaWidget(DockManager, _this);
+		CDockAreaWidget* OldDockArea = DroppedDockWidget->dockAreaWidget();
+		if (OldDockArea)
+		{
+			OldDockArea->removeDockWidget(DroppedDockWidget);
+		}
+		NewDockArea->addDockWidget(DroppedDockWidget);
+	}
+	else
+	{
+		DroppedDockArea->dockContainer()->removeDockArea(DroppedDockArea);
+		NewDockArea = DroppedDockArea;
+	}
+
+	addDockArea(NewDockArea, area);
+	LastAddedAreaCache[areaIdToIndex(area)] = NewDockArea;
+}
+
+
+//============================================================================
 void DockContainerWidgetPrivate::addDockAreasToList(const QList<CDockAreaWidget*> NewDockAreas)
 {
 	int CountBefore = DockAreas.count();
@@ -555,7 +742,7 @@ void DockContainerWidgetPrivate::saveChildNodesState(QXmlStreamWriter& s, QWidge
 	if (Splitter)
 	{
 		s.writeStartElement("Splitter");
-		s.writeAttribute("Orientation", (Splitter->orientation() == Qt::Horizontal) ? "-" : "|");
+		s.writeAttribute("Orientation", (Splitter->orientation() == Qt::Horizontal) ? "|" : "-");
 		s.writeAttribute("Count", QString::number(Splitter->count()));
         ADS_PRINT("NodeSplitter orient: " << Splitter->orientation()
             << " WidgetCont: " << Splitter->count());
@@ -590,11 +777,11 @@ bool DockContainerWidgetPrivate::restoreSplitter(QXmlStreamReader& s,
 	bool Ok;
 	QString OrientationStr = s.attributes().value("Orientation").toString();
 	int Orientation;
-	if (OrientationStr.startsWith("-"))
+	if (OrientationStr.startsWith("|"))
 	{
 		Orientation = Qt::Horizontal;
 	}
-	else if (OrientationStr.startsWith("|"))
+	else if (OrientationStr.startsWith("-"))
 	{
 		Orientation = Qt::Vertical;
 	}
@@ -848,9 +1035,7 @@ void DockContainerWidgetPrivate::addDockArea(CDockAreaWidget* NewDockArea, DockW
 		RootSplitter = NewSplitter;
 	}
 
-	appendDockAreas({NewDockArea});
-	NewDockArea->updateTitleBarVisibility();
-	emitDockAreasAdded();
+	addDockAreasToList({NewDockArea});
 }
 
 
@@ -1194,11 +1379,11 @@ void CDockContainerWidget::dropFloatingWidget(CFloatingDockContainer* FloatingWi
 	const QPoint& TargetPos)
 {
     ADS_PRINT("CDockContainerWidget::dropFloatingWidget");
+	CDockWidget* SingleDroppedDockWidget = FloatingWidget->topLevelDockWidget();
+	CDockWidget* SingleDockWidget = topLevelDockWidget();
 	CDockAreaWidget* DockArea = dockAreaAt(TargetPos);
 	auto dropArea = InvalidDockWidgetArea;
 	auto ContainerDropArea = d->DockManager->containerOverlay()->dropAreaUnderCursor();
-	CDockWidget* FloatingTopLevelDockWidget = FloatingWidget->topLevelDockWidget();
-	CDockWidget* TopLevelDockWidget = topLevelDockWidget();
 
 	if (DockArea)
 	{
@@ -1229,19 +1414,57 @@ void CDockContainerWidget::dropFloatingWidget(CFloatingDockContainer* FloatingWi
 		}
 	}
 
+	// If we dropped a floating widget with only one single dock widget, then we
+	// drop a top level widget that changes from floating to docked now
+	CDockWidget::emitTopLevelEventForWidget(SingleDroppedDockWidget, false);
+
 	// If there was a top level widget before the drop, then it is not top
 	// level widget anymore
-	if (TopLevelDockWidget)
+	CDockWidget::emitTopLevelEventForWidget(SingleDockWidget, false);
+}
+
+
+//============================================================================
+void CDockContainerWidget::dropWidget(QWidget* Widget, const QPoint& TargetPos)
+{
+    ADS_PRINT("CDockContainerWidget::dropFloatingWidget");
+    CDockWidget* SingleDockWidget = topLevelDockWidget();
+	CDockAreaWidget* DockArea = dockAreaAt(TargetPos);
+	auto dropArea = InvalidDockWidgetArea;
+	auto ContainerDropArea = d->DockManager->containerOverlay()->dropAreaUnderCursor();
+
+	if (DockArea)
 	{
-		TopLevelDockWidget->emitTopLevelChanged(false);
+		auto dropOverlay = d->DockManager->dockAreaOverlay();
+		dropOverlay->setAllowedAreas(AllDockAreas);
+		dropArea = dropOverlay->showOverlay(DockArea);
+		if (ContainerDropArea != InvalidDockWidgetArea &&
+			ContainerDropArea != dropArea)
+		{
+			dropArea = InvalidDockWidgetArea;
+		}
+
+		if (dropArea != InvalidDockWidgetArea)
+		{
+            ADS_PRINT("Dock Area Drop Content: " << dropArea);
+            d->moveToNewSection(Widget, DockArea, dropArea);
+		}
 	}
 
-	// If we drop a floating widget with only one single dock widget, then we
-	// drop a top level widget that changes from floating to docked now
-	if (FloatingTopLevelDockWidget)
+	// mouse is over container
+	if (InvalidDockWidgetArea == dropArea)
 	{
-		FloatingTopLevelDockWidget->emitTopLevelChanged(false);
+		dropArea = ContainerDropArea;
+        ADS_PRINT("Container Drop Content: " << dropArea);
+		if (dropArea != InvalidDockWidgetArea)
+		{
+			d->moveToContainer(Widget, dropArea);
+		}
 	}
+
+	// If there was a top level widget before the drop, then it is not top
+	// level widget anymore
+	CDockWidget::emitTopLevelEventForWidget(SingleDockWidget, false);
 }
 
 

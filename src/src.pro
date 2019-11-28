@@ -37,10 +37,12 @@ HEADERS += \
     DockWidget.h \
     DockWidgetTab.h \
     FloatingDockContainer.h \
+    FloatingOverlay.h \
     DockOverlay.h \
     DockSplitter.h \
     DockAreaTitleBar.h \
-    ElidingLabel.h
+    ElidingLabel.h \
+    IconProvider.h
 
 
 SOURCES += \
@@ -52,10 +54,12 @@ SOURCES += \
     DockWidget.cpp \
     DockWidgetTab.cpp \
     FloatingDockContainer.cpp \
+    FloatingOverlay.cpp \
     DockOverlay.cpp \
     DockSplitter.cpp \
     DockAreaTitleBar.cpp \
-    ElidingLabel.cpp
+    ElidingLabel.cpp \
+    IconProvider.cpp
 
 
 unix {
