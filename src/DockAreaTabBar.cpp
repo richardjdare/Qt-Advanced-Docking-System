@@ -172,7 +172,7 @@ void CDockAreaTabBar::mouseReleaseEvent(QMouseEvent* ev)
 {
 	if (ev->button() == Qt::LeftButton)
 	{
-        ADS_PRINT("CTabsScrollArea::mouseReleaseEvent");
+        ADS_PRINT("CDockAreaTabBar::mouseReleaseEvent");
 		ev->accept();
 		d->FloatingWidget = nullptr;
 		d->DragStartMousePos = QPoint();
@@ -449,7 +449,13 @@ void CDockAreaTabBar::onCloseOtherTabsRequested()
 		auto Tab = tab(i);
 		if (Tab->isClosable() && !Tab->isHidden() && Tab != Sender)
 		{
+			// If the dock widget is deleted with the closeTab() call, its tab
+			// it will no longer be in the layout, and thus the index needs to
+			// be updated to not skip any tabs
+			int Offset = Tab->dockWidget()->features().testFlag(
+				CDockWidget::DockWidgetDeleteOnClose) ? 1 : 0;
 			closeTab(i);
+			i -= Offset;
 		}
 	}
 }
