@@ -28,6 +28,7 @@
 //============================================================================
 //                                   INCLUDES
 //============================================================================
+#include <FloatingDragPreview.h>
 #include "ElidingLabel.h"
 #include "DockWidgetTab.h"
 
@@ -46,7 +47,6 @@
 #include "DockWidget.h"
 #include "DockAreaWidget.h"
 #include "FloatingDockContainer.h"
-#include "FloatingOverlay.h"
 #include "DockOverlay.h"
 #include "DockManager.h"
 #include "IconProvider.h"
@@ -95,7 +95,7 @@ struct DockWidgetTabPrivate
 	/**
 	 * Test function for current drag state
 	 */
-	bool isDraggingState(eDragState dragState)
+	bool isDraggingState(eDragState dragState) const
 	{
 		return this->DragState == dragState;
 	}
@@ -151,7 +151,12 @@ struct DockWidgetTabPrivate
 		}
 		else
 		{
-			return new CFloatingOverlay(Widget);
+			auto w = new CFloatingDragPreview(Widget);
+			_this->connect(w, &CFloatingDragPreview::draggingCanceled, [=]()
+			{
+				DragState = DraggingInactive;
+			});
+			return w;
 		}
 	}
 };
@@ -246,6 +251,7 @@ bool DockWidgetTabPrivate::startFloating(eDragState DraggingState)
 	IFloatingWidget* FloatingWidget = nullptr;
 	bool OpaqueUndocking = CDockManager::configFlags().testFlag(CDockManager::OpaqueUndocking) ||
 		(DraggingFloatingWidget != DraggingState);
+
 	// If section widget has multiple tabs, we take only one tab
 	// If it has only one single tab, we can move the complete
 	// dock area into floating widget
@@ -311,26 +317,29 @@ void CDockWidgetTab::mousePressEvent(QMouseEvent* ev)
 //============================================================================
 void CDockWidgetTab::mouseReleaseEvent(QMouseEvent* ev)
 {
-	auto CurrentDragState = d->DragState;
-    d->DragStartMousePosition = QPoint();
-    d->DragState = DraggingInactive;
+	if (ev->button() == Qt::LeftButton)
+	{
+		auto CurrentDragState = d->DragState;
+		d->DragStartMousePosition = QPoint();
+		d->DragState = DraggingInactive;
 
-    switch (CurrentDragState)
-    {
-    case DraggingTab:
-		// End of tab moving, emit signal
-		if (d->DockArea)
+		switch (CurrentDragState)
 		{
-			emit moved(ev->globalPos());
+		case DraggingTab:
+			// End of tab moving, emit signal
+			if (d->DockArea)
+			{
+				emit moved(ev->globalPos());
+			}
+			break;
+
+		case DraggingFloatingWidget:
+			 d->FloatingWidget->finishDragging();
+			 break;
+
+		default:; // do nothing
 		}
-    	break;
-
-    case DraggingFloatingWidget:
-    	 d->FloatingWidget->finishDragging();
-    	 break;
-
-    default:; // do nothing
-    }
+	}
 
 	Super::mouseReleaseEvent(ev);
 }
@@ -410,6 +419,10 @@ void CDockWidgetTab::mouseMoveEvent(QMouseEvent* ev)
 void CDockWidgetTab::contextMenuEvent(QContextMenuEvent* ev)
 {
 	ev->accept();
+	if (d->isDraggingState(DraggingFloatingWidget))
+	{
+		return;
+	}
 
 	d->DragStartMousePosition = ev->pos();
 	QMenu Menu(this);
