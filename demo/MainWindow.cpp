@@ -53,6 +53,13 @@
 #include <QRubberBand>
 #include <QPlainTextEdit>
 #include <QTableWidget>
+#include <QScreen>
+#include <QStyle>
+#include <QMessageBox>
+
+#ifdef Q_OS_WIN
+#include <QAxWidget>
+#endif
 
 #include <QMap>
 #include <QElapsedTimer>
@@ -171,6 +178,7 @@ static ads::CDockWidget* createEditorWidget(QMenu* ViewMenu)
 	ads::CDockWidget* DockWidget = new ads::CDockWidget(QString("Editor %1").arg(EditorCount++));
 	DockWidget->setWidget(w);
 	DockWidget->setIcon(svgIcon(":/adsdemo/images/edit.svg"));
+	DockWidget->setFeature(ads::CDockWidget::CustomCloseHandling, true);
 	ViewMenu->addAction(DockWidget->toggleViewAction());
 	return DockWidget;
 }
@@ -198,6 +206,20 @@ static ads::CDockWidget* createTableWidget(QMenu* ViewMenu)
    ViewMenu->addAction(DockWidget->toggleViewAction());
    return DockWidget;
 }
+
+
+#ifdef Q_OS_WIN
+//============================================================================
+static ads::CDockWidget* createActiveXWidget(QMenu* ViewMenu, QWidget* parent = nullptr)
+{
+   static int ActiveXCount = 0;
+   QAxWidget* w = new QAxWidget("{6bf52a52-394a-11d3-b153-00c04f79faa6}", parent);
+   ads::CDockWidget* DockWidget = new ads::CDockWidget(QString("Active X %1").arg(ActiveXCount++));
+   DockWidget->setWidget(w);
+   ViewMenu->addAction(DockWidget->toggleViewAction());
+   return DockWidget;
+}
+#endif
 
 
 //============================================================================
@@ -279,15 +301,23 @@ void MainWindowPrivate::createContent()
 	auto RighDockArea = DockManager->addDockWidget(ads::RightDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), TopDockArea);
 	DockManager->addDockWidget(ads::TopDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), RighDockArea);
 	auto BottomDockArea = DockManager->addDockWidget(ads::BottomDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), RighDockArea);
-	DockManager->addDockWidget(ads::RightDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), RighDockArea);
+	DockManager->addDockWidget(ads::CenterDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), RighDockArea);
 	DockManager->addDockWidget(ads::CenterDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), BottomDockArea);
 
     auto Action = ui.menuView->addAction(QString("Set %1 floating").arg(DockWidget->windowTitle()));
     DockWidget->connect(Action, SIGNAL(triggered()), SLOT(setFloating()));
 
+#ifdef Q_OS_WIN
+    if (!DockManager->configFlags().testFlag(ads::CDockManager::OpaqueUndocking))
+    {
+    	DockManager->addDockWidget(ads::CenterDockWidgetArea, createActiveXWidget(ViewMenu), RighDockArea);
+    }
+#endif
+
 	for (auto DockWidget : DockManager->dockWidgetsMap())
 	{
 		_this->connect(DockWidget, SIGNAL(viewToggled(bool)), SLOT(onViewToggled(bool)));
+		_this->connect(DockWidget, SIGNAL(visibilityChanged(bool)), SLOT(onViewVisibilityChanged(bool)));
 	}
 }
 
@@ -378,13 +408,14 @@ CMainWindow::CMainWindow(QWidget *parent) :
 	// a QToolButton instead of a QPushButton
 	// CDockManager::setConfigFlags(CDockManager::configFlags() | CDockManager::TabCloseButtonIsToolButton);
 
+    // comment the following line if you want to use opaque undocking and
+	// opaque splitter resizing
+    CDockManager::setConfigFlags(CDockManager::DefaultNonOpaqueConfig);
+
     // uncomment the following line if you want a fixed tab width that does
 	// not change if the visibility of the close button changes
-    // CDockManager::setConfigFlag(CDockManager::RetainTabSizeWhenCloseButtonHidden, true);
+    //CDockManager::setConfigFlag(CDockManager::RetainTabSizeWhenCloseButtonHidden, true);
 
-    // uncomment the following line if you want to use non opaque undocking and splitter
-    // movements
-    // CDockManager::setConfigFlags(CDockManager::DefaultNonOpaqueConfig);
 
 	// Now create the dock manager and its content
 	d->DockManager = new CDockManager(this);
@@ -397,8 +428,12 @@ CMainWindow::CMainWindow(QWidget *parent) :
 		d->DockManager, SLOT(openPerspective(const QString&)));
 
 	d->createContent();
-	// Default window geometry
+	// Default window geometry - center on screen
     resize(1280, 720);
+    setGeometry(QStyle::alignedRect(
+        Qt::LeftToRight, Qt::AlignCenter, frameSize(),
+        QGuiApplication::primaryScreen()->availableGeometry()
+    ));
 
 	//d->restoreState();
 	d->restorePerspectives();
@@ -469,12 +504,40 @@ void CMainWindow::onViewToggled(bool Open)
 
 
 //============================================================================
+void CMainWindow::onViewVisibilityChanged(bool Visible)
+{
+	auto DockWidget = qobject_cast<ads::CDockWidget*>(sender());
+    if (!DockWidget)
+    {
+        return;
+    }
+
+    qDebug() << DockWidget->objectName() << " visibilityChanged(" << Visible << ")";
+}
+
+
+//============================================================================
 void CMainWindow::createEditor()
 {
 	auto DockWidget = createEditorWidget(d->ui.menuView);
 	DockWidget->setFeature(ads::CDockWidget::DockWidgetDeleteOnClose, true);
 	auto FloatingWidget = d->DockManager->addDockWidgetFloating(DockWidget);
     FloatingWidget->move(QPoint(20, 20));
+    connect(DockWidget, SIGNAL(closeRequested()), SLOT(onEditorCloseRequested()));
+}
+
+
+//============================================================================
+void CMainWindow::onEditorCloseRequested()
+{
+	auto DockWidget = qobject_cast<ads::CDockWidget*>(sender());
+	int Result = QMessageBox::question(this, "Close Editor", QString("Editor %1 "
+		"contains unsaved changes? Would you like to close it?")
+		.arg(DockWidget->windowTitle()));
+	if (QMessageBox::Yes == Result)
+	{
+		DockWidget->closeDockWidget();
+	}
 }
 
 
