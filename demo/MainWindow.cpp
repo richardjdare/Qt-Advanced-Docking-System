@@ -56,6 +56,9 @@
 #include <QScreen>
 #include <QStyle>
 #include <QMessageBox>
+#include <QMenu>
+#include <QToolButton>
+
 
 #ifdef Q_OS_WIN
 #include <QAxWidget>
@@ -67,6 +70,8 @@
 #include "DockManager.h"
 #include "DockWidget.h"
 #include "DockAreaWidget.h"
+#include "DockAreaTitleBar.h"
+#include "DockAreaTabBar.h"
 #include "FloatingDockContainer.h"
 
 
@@ -129,7 +134,7 @@ static void appendFeaturStringToWindowTitle(ads::CDockWidget* DockWidget)
  */
 static QIcon svgIcon(const QString& File)
 {
-	// This is a workaround, because because in item views SVG icons are not
+	// This is a workaround, because in item views SVG icons are not
 	// properly scaled an look blurry or pixelate
 	QIcon SvgIcon(File);
 	SvgIcon.addPixmap(SvgIcon.pixmap(92));
@@ -180,6 +185,20 @@ static ads::CDockWidget* createEditorWidget(QMenu* ViewMenu)
 	DockWidget->setIcon(svgIcon(":/adsdemo/images/edit.svg"));
 	DockWidget->setFeature(ads::CDockWidget::CustomCloseHandling, true);
 	ViewMenu->addAction(DockWidget->toggleViewAction());
+
+	QMenu* OptionsMenu = new QMenu(DockWidget);
+	OptionsMenu->setTitle(QObject::tr("Options"));
+	OptionsMenu->setToolTip(OptionsMenu->title());
+	OptionsMenu->setIcon(svgIcon(":/adsdemo/images/custom-menu-button.svg"));
+	auto MenuAction = OptionsMenu->menuAction();
+	// The object name of the action will be set for the QToolButton that
+	// is created in the dock area title bar. You can use this name for CSS
+	// styling
+	MenuAction->setObjectName("optionsMenu");
+	DockWidget->setTitleBarActions({OptionsMenu->menuAction()});
+	auto a = OptionsMenu->addAction(QObject::tr("Clear Editor"));
+	w->connect(a, SIGNAL(triggered()), SLOT(clear()));
+
 	return DockWidget;
 }
 
@@ -268,7 +287,6 @@ struct MainWindowPrivate
 	void restorePerspectives();
 };
 
-
 //============================================================================
 void MainWindowPrivate::createContent()
 {
@@ -301,10 +319,32 @@ void MainWindowPrivate::createContent()
 	FileSystemWidget->setFeature(ads::CDockWidget::DockWidgetFloatable, false);
 	appendFeaturStringToWindowTitle(FileSystemWidget);
 	auto TopDockArea = DockManager->addDockWidget(ads::TopDockWidgetArea, FileSystemWidget);
+
+	// We create a calendar widget and clear all flags to prevent the dock area
+	// from closing
 	DockWidget = createCalendarDockWidget(ViewMenu);
 	DockWidget->setFeature(ads::CDockWidget::DockWidgetClosable, false);
+	DockWidget->setFeature(ads::CDockWidget::DockWidgetMovable, false);
+	DockWidget->setFeature(ads::CDockWidget::DockWidgetFloatable, false);
 	DockWidget->setTabToolTip(QString("Tab ToolTip\nHodie est dies magna"));
-	DockManager->addDockWidget(ads::CenterDockWidgetArea, DockWidget, TopDockArea);
+	auto DockArea = DockManager->addDockWidget(ads::CenterDockWidgetArea, DockWidget, TopDockArea);
+
+	// Now we add a custom button to the dock area title bar that will create
+	// new editor widgets when clicked
+	auto CustomButton = new QToolButton(DockArea);
+	CustomButton->setToolTip(QObject::tr("Create Editor"));
+	CustomButton->setIcon(svgIcon(":/adsdemo/images/plus.svg"));
+	CustomButton->setAutoRaise(true);
+	auto TitleBar = DockArea->titleBar();
+	int Index = TitleBar->indexOf(TitleBar->tabBar());
+	TitleBar->insertWidget(Index + 1, CustomButton);
+	QObject::connect(CustomButton, &QToolButton::clicked, [=]()
+	{
+		auto DockWidget = createEditorWidget(ui.menuView);
+		DockWidget->setFeature(ads::CDockWidget::DockWidgetDeleteOnClose, true);
+		DockManager->addDockWidgetTabToArea(DockWidget, DockArea);
+		_this->connect(DockWidget, SIGNAL(closeRequested()), SLOT(onEditorCloseRequested()));
+	});
 
 	// Test dock area docking
 	auto RighDockArea = DockManager->addDockWidget(ads::RightDockWidgetArea, createLongTextLabelDockWidget(ViewMenu), TopDockArea);
@@ -411,6 +451,7 @@ CMainWindow::CMainWindow(QWidget *parent) :
 {
 	using namespace ads;
 	d->ui.setupUi(this);
+
 	d->createActions();
 
 	// uncomment the following line if the tab close button should be
@@ -436,6 +477,15 @@ CMainWindow::CMainWindow(QWidget *parent) :
 
 	// uncomment the following line if you don't want disabled buttons to appear on DockArea's title bar
 	//CDockManager::setConfigFlag(CDockManager::DockAreaHideDisabledButtons, true);
+
+	// uncomment the following line if you want to show tabs menu button on DockArea's title bar only when there are more than one tab and at least of them has elided title
+	//CDockManager::setConfigFlag(CDockManager::DockAreaDynamicTabsMenuButtonVisibility, true);
+
+	// uncomment the following line if you want floating container to always show application title instead of active dock widget's title
+	//CDockManager::setConfigFlag(CDockManager::FloatingContainerHasWidgetTitle, false);
+
+	// uncomment the following line if you want floating container to show active dock widget's icon instead of always showing application icon
+	//CDockManager::setConfigFlag(CDockManager::FloatingContainerHasWidgetIcon, true);
 
 	// Now create the dock manager and its content
 	d->DockManager = new CDockManager(this);

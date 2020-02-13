@@ -338,6 +338,7 @@ void DockAreaWidgetPrivate::updateTitleBarButtonStates()
 		_this->features().testFlag(CDockWidget::DockWidgetClosable));
 	TitleBar->button(TitleBarButtonUndock)->setEnabled(
 		_this->features().testFlag(CDockWidget::DockWidgetFloatable));
+	TitleBar->updateDockWidgetActionsButtons();
 	UpdateTitleBarButtons = false;
 }
 
@@ -854,6 +855,13 @@ void CDockAreaWidget::closeArea()
 void CDockAreaWidget::closeOtherAreas()
 {
 	dockContainer()->closeOtherAreas(this);
+}
+
+
+//============================================================================
+CDockAreaTitleBar* CDockAreaWidget::titleBar() const
+{
+	return d->TitleBar;
 }
 } // namespace ads
 

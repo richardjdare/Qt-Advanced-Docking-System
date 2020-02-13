@@ -41,6 +41,7 @@
 
 #include "ads_globals.h"
 #include "FloatingDockContainer.h"
+#include "FloatingDragPreview.h"
 #include "DockAreaWidget.h"
 #include "DockOverlay.h"
 #include "DockManager.h"
@@ -65,11 +66,17 @@ struct DockAreaTitleBarPrivate
 	QPointer<tTitleBarButton> TabsMenuButton;
 	QPointer<tTitleBarButton> UndockButton;
 	QPointer<tTitleBarButton> CloseButton;
-	QBoxLayout* TopLayout;
+	QBoxLayout* Layout;
 	CDockAreaWidget* DockArea;
 	CDockAreaTabBar* TabBar;
 	bool MenuOutdated = true;
 	QMenu* TabsMenu;
+	QList<tTitleBarButton*> DockWidgetActionsButtons;
+
+	QPoint DragStartMousePos;
+	eDragState DragState = DraggingInactive;
+	IFloatingWidget* FloatingWidget = nullptr;
+
 
 	/**
 	 * Private data constructor
@@ -101,6 +108,25 @@ struct DockAreaTitleBarPrivate
 	{
 		return CDockManager::configFlags().testFlag(Flag);
 	}
+
+	/**
+	 * Test function for current drag state
+	 */
+	bool isDraggingState(eDragState dragState) const
+	{
+		return this->DragState == dragState;
+	}
+
+
+	/**
+	 * Starts floating
+	 */
+	void startFloating(const QPoint& Offset);
+
+	/**
+	 * Makes the dock area floating
+	 */
+	IFloatingWidget* makeAreaFloating(const QPoint& Offset, eDragState DragState);
 };// struct DockAreaTitleBarPrivate
 
 
@@ -112,6 +138,7 @@ struct DockAreaTitleBarPrivate
  */
 class CTitleBarButton : public tTitleBarButton
 {
+	Q_OBJECT
 	bool Visible = true;
 	bool HideWhenDisabled = false;
 public:
@@ -149,11 +176,36 @@ protected:
 		if(QEvent::EnabledChange == ev->type() && HideWhenDisabled)
 		{
 			// force setVisible() call 
-			setVisible(isEnabled());
+			// Calling setVisible() directly here doesn't work well when button is expected to be shown first time
+			QMetaObject::invokeMethod(this, "setVisible", Qt::QueuedConnection, Q_ARG(bool, isEnabled()));
 		}
 
-		return Super::event(ev);;
+		return Super::event(ev);
 	}
+};
+
+
+/**
+ * This spacer widget is here because of the following problem.
+ * The dock area title bar handles mouse dragging and moving the floating widget.
+ * The  problem is, that if the title bar becomes invisible, i.e. if the dock
+ * area contains only one single dock widget and the dock area is moved
+ * into a floating widget, then mouse events are not handled anymore and dragging
+ * of the floating widget stops.
+ */
+class CSpacerWidget : public QWidget
+{
+	Q_OBJECT
+public:
+	using Super = QWidget;
+	CSpacerWidget(QWidget* Parent = 0)
+	    : Super(Parent)
+	{
+	    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	    setStyleSheet("border: none; background: none;");
+	}
+	virtual QSize sizeHint() const override {return QSize(0, 0);}
+	virtual QSize minimumSizeHint() const override {return QSize(0, 0);}
 };
 
 
@@ -184,10 +236,9 @@ void DockAreaTitleBarPrivate::createButtons()
 	TabsMenuButton->setMenu(TabsMenu);
 	internal::setToolTip(TabsMenuButton, QObject::tr("List all tabs"));
 	TabsMenuButton->setSizePolicy(ButtonSizePolicy);
-	TopLayout->addWidget(TabsMenuButton, 0);
+	Layout->addWidget(TabsMenuButton, 0);
 	_this->connect(TabsMenuButton->menu(), SIGNAL(triggered(QAction*)),
 		SLOT(onTabsMenuActionTriggered(QAction*)));
-
 
 	// Undock button
 	UndockButton = new CTitleBarButton(testConfigFlag(CDockManager::DockAreaHasUndockButton));
@@ -196,7 +247,7 @@ void DockAreaTitleBarPrivate::createButtons()
 	internal::setToolTip(UndockButton, QObject::tr("Detach Group"));
 	internal::setButtonIcon(UndockButton, QStyle::SP_TitleBarNormalButton, ads::DockAreaUndockIcon);
 	UndockButton->setSizePolicy(ButtonSizePolicy);
-	TopLayout->addWidget(UndockButton, 0);
+	Layout->addWidget(UndockButton, 0);
 	_this->connect(UndockButton, SIGNAL(clicked()), SLOT(onUndockButtonClicked()));
 
 	// Close button
@@ -214,7 +265,7 @@ void DockAreaTitleBarPrivate::createButtons()
 	}
 	CloseButton->setSizePolicy(ButtonSizePolicy);
 	CloseButton->setIconSize(QSize(16, 16));
-	TopLayout->addWidget(CloseButton, 0);
+	Layout->addWidget(CloseButton, 0);
 	_this->connect(CloseButton, SIGNAL(clicked()), SLOT(onCloseButtonClicked()));
 }
 
@@ -223,7 +274,8 @@ void DockAreaTitleBarPrivate::createButtons()
 void DockAreaTitleBarPrivate::createTabBar()
 {
 	TabBar = new CDockAreaTabBar(DockArea);
-	TopLayout->addWidget(TabBar);
+    TabBar->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
+	Layout->addWidget(TabBar);
 	_this->connect(TabBar, SIGNAL(tabClosed(int)), SLOT(markTabsMenuOutdated()));
 	_this->connect(TabBar, SIGNAL(tabOpened(int)), SLOT(markTabsMenuOutdated()));
 	_this->connect(TabBar, SIGNAL(tabInserted(int)), SLOT(markTabsMenuOutdated()));
@@ -231,10 +283,51 @@ void DockAreaTitleBarPrivate::createTabBar()
 	_this->connect(TabBar, SIGNAL(tabMoved(int, int)), SLOT(markTabsMenuOutdated()));
 	_this->connect(TabBar, SIGNAL(currentChanged(int)), SLOT(onCurrentTabChanged(int)));
 	_this->connect(TabBar, SIGNAL(tabBarClicked(int)), SIGNAL(tabBarClicked(int)));
+	_this->connect(TabBar, SIGNAL(elidedChanged(bool)), SLOT(markTabsMenuOutdated()));
+}
 
-	TabBar->setContextMenuPolicy(Qt::CustomContextMenu);
-	_this->connect(TabBar, SIGNAL(customContextMenuRequested(const QPoint&)),
-		SLOT(showContextMenu(const QPoint&)));
+
+//============================================================================
+IFloatingWidget* DockAreaTitleBarPrivate::makeAreaFloating(const QPoint& Offset, eDragState DragState)
+{
+	QSize Size = DockArea->size();
+	this->DragState = DragState;
+	bool OpaqueUndocking = CDockManager::configFlags().testFlag(CDockManager::OpaqueUndocking) ||
+		(DraggingFloatingWidget != DragState);
+	CFloatingDockContainer* FloatingDockContainer = nullptr;
+	IFloatingWidget* FloatingWidget;
+	if (OpaqueUndocking)
+	{
+		FloatingWidget = FloatingDockContainer = new CFloatingDockContainer(DockArea);
+	}
+	else
+	{
+		auto w = new CFloatingDragPreview(DockArea);
+		QObject::connect(w, &CFloatingDragPreview::draggingCanceled, [=]()
+		{
+			this->DragState = DraggingInactive;
+		});
+		FloatingWidget = w;
+	}
+
+    FloatingWidget->startFloating(Offset, Size, DragState, nullptr);
+    if (FloatingDockContainer)
+    {
+		auto TopLevelDockWidget = FloatingDockContainer->topLevelDockWidget();
+		if (TopLevelDockWidget)
+		{
+			TopLevelDockWidget->emitTopLevelChanged(true);
+		}
+    }
+
+	return FloatingWidget;
+}
+
+
+//============================================================================
+void DockAreaTitleBarPrivate::startFloating(const QPoint& Offset)
+{
+	FloatingWidget = makeAreaFloating(Offset, DraggingFloatingWidget);
 }
 
 
@@ -246,15 +339,15 @@ CDockAreaTitleBar::CDockAreaTitleBar(CDockAreaWidget* parent) :
 	d->DockArea = parent;
 
 	setObjectName("dockAreaTitleBar");
-	d->TopLayout = new QBoxLayout(QBoxLayout::LeftToRight);
-	d->TopLayout->setContentsMargins(0, 0, 0, 0);
-	d->TopLayout->setSpacing(0);
-	setLayout(d->TopLayout);
-	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	d->Layout = new QBoxLayout(QBoxLayout::LeftToRight);
+	d->Layout->setContentsMargins(0, 0, 0, 0);
+	d->Layout->setSpacing(0);
+	setLayout(d->Layout);
+	setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
 	d->createTabBar();
+	d->Layout->addWidget(new CSpacerWidget(this));
 	d->createButtons();
-
 }
 
 
@@ -285,13 +378,30 @@ CDockAreaTabBar* CDockAreaTitleBar::tabBar() const
 	return d->TabBar;
 }
 
-
 //============================================================================
 void CDockAreaTitleBar::markTabsMenuOutdated()
 {
+	if(DockAreaTitleBarPrivate::testConfigFlag(CDockManager::DockAreaDynamicTabsMenuButtonVisibility))
+	{
+		bool hasElidedTabTitle = false;
+		for (int i = 0; i < d->TabBar->count(); ++i)
+		{
+			if (!d->TabBar->isTabOpen(i))
+			{
+				continue;
+			}
+			CDockWidgetTab* Tab = d->TabBar->tab(i);
+			if(Tab->isTitleElided())
+			{
+				hasElidedTabTitle = true;
+				break;
+			}
+		}
+		bool visible = (hasElidedTabTitle && (d->TabBar->count() > 1));
+		QMetaObject::invokeMethod(d->TabsMenuButton, "setVisible", Qt::QueuedConnection, Q_ARG(bool, visible));
+	}
 	d->MenuOutdated = true;
 }
-
 
 //============================================================================
 void CDockAreaTitleBar::onTabsMenuAboutToShow()
@@ -339,7 +449,7 @@ void CDockAreaTitleBar::onUndockButtonClicked()
 {
 	if (d->DockArea->features().testFlag(CDockWidget::DockWidgetFloatable))
 	{
-		d->TabBar->makeAreaFloating(mapFromGlobal(QCursor::pos()), DraggingInactive);
+		d->makeAreaFloating(mapFromGlobal(QCursor::pos()), DraggingInactive);
 	}
 }
 
@@ -350,6 +460,40 @@ void CDockAreaTitleBar::onTabsMenuActionTriggered(QAction* Action)
 	int Index = Action->data().toInt();
 	d->TabBar->setCurrentIndex(Index);
 	emit tabBarClicked(Index);
+}
+
+
+//============================================================================
+void CDockAreaTitleBar::updateDockWidgetActionsButtons()
+{
+	CDockWidget* DockWidget = d->TabBar->currentTab()->dockWidget();
+	if (!d->DockWidgetActionsButtons.isEmpty())
+	{
+		for (auto Button : d->DockWidgetActionsButtons)
+		{
+			d->Layout->removeWidget(Button);
+			delete Button;
+		}
+		d->DockWidgetActionsButtons.clear();
+	}
+
+	auto Actions = DockWidget->titleBarActions();
+	if (Actions.isEmpty())
+	{
+		return;
+	}
+
+	int InsertIndex = indexOf(d->TabsMenuButton);
+	for (auto Action : Actions)
+	{
+		auto Button = new CTitleBarButton(true, this);
+		Button->setDefaultAction(Action);
+		Button->setAutoRaise(true);
+		Button->setPopupMode(QToolButton::InstantPopup);
+		Button->setObjectName(Action->objectName());
+		d->Layout->insertWidget(InsertIndex++, Button, 0);
+		d->DockWidgetActionsButtons.append(Button);
+	}
 }
 
 
@@ -366,6 +510,8 @@ void CDockAreaTitleBar::onCurrentTabChanged(int Index)
 		CDockWidget* DockWidget = d->TabBar->tab(Index)->dockWidget();
 		d->CloseButton->setEnabled(DockWidget->features().testFlag(CDockWidget::DockWidgetClosable));
 	}
+
+	updateDockWidgetActionsButtons();
 }
 
 
@@ -392,9 +538,109 @@ void CDockAreaTitleBar::setVisible(bool Visible)
 
 
 //============================================================================
-void CDockAreaTitleBar::showContextMenu(const QPoint& pos)
+void CDockAreaTitleBar::mousePressEvent(QMouseEvent* ev)
 {
-	if (d->TabBar->dragState() == DraggingFloatingWidget)
+	if (ev->button() == Qt::LeftButton)
+	{
+		ev->accept();
+		d->DragStartMousePos = ev->pos();
+		d->DragState = DraggingMousePressed;
+		return;
+	}
+	Super::mousePressEvent(ev);
+}
+
+
+//============================================================================
+void CDockAreaTitleBar::mouseReleaseEvent(QMouseEvent* ev)
+{
+	if (ev->button() == Qt::LeftButton)
+	{
+        ADS_PRINT("CDockAreaTitleBar::mouseReleaseEvent");
+		ev->accept();
+		auto CurrentDragState = d->DragState;
+		d->DragStartMousePos = QPoint();
+		d->DragState = DraggingInactive;
+		if (DraggingFloatingWidget == CurrentDragState)
+		{
+			d->FloatingWidget->finishDragging();
+		}
+		return;
+	}
+	Super::mouseReleaseEvent(ev);
+}
+
+
+//============================================================================
+void CDockAreaTitleBar::mouseMoveEvent(QMouseEvent* ev)
+{
+	Super::mouseMoveEvent(ev);
+	if (!(ev->buttons() & Qt::LeftButton) || d->isDraggingState(DraggingInactive))
+	{
+		d->DragState = DraggingInactive;
+		return;
+	}
+
+    // move floating window
+    if (d->isDraggingState(DraggingFloatingWidget))
+    {
+        d->FloatingWidget->moveFloating();
+        return;
+    }
+
+	// If this is the last dock area in a dock container it does not make
+	// sense to move it to a new floating widget and leave this one
+	// empty
+	if (d->DockArea->dockContainer()->isFloating()
+	 && d->DockArea->dockContainer()->visibleDockAreaCount() == 1)
+	{
+		return;
+	}
+
+	// If one single dock widget in this area is not floatable then the whole
+	// area is not floatable
+	if (!d->DockArea->features().testFlag(CDockWidget::DockWidgetFloatable))
+	{
+		return;
+	}
+
+	int DragDistance = (d->DragStartMousePos - ev->pos()).manhattanLength();
+	if (DragDistance >= CDockManager::startDragDistance())
+	{
+        ADS_PRINT("CTabsScrollArea::startFloating");
+		d->startFloating(d->DragStartMousePos);
+		auto Overlay = d->DockArea->dockManager()->containerOverlay();
+		Overlay->setAllowedAreas(OuterDockAreas);
+	}
+
+	return;
+}
+
+
+//============================================================================
+void CDockAreaTitleBar::mouseDoubleClickEvent(QMouseEvent *event)
+{
+	// If this is the last dock area in a dock container it does not make
+	// sense to move it to a new floating widget and leave this one
+	// empty
+	if (d->DockArea->dockContainer()->isFloating() && d->DockArea->dockContainer()->dockAreaCount() == 1)
+	{
+		return;
+	}
+
+	if (!d->DockArea->features().testFlag(CDockWidget::DockWidgetFloatable))
+	{
+		return;
+	}
+	d->makeAreaFloating(event->pos(), DraggingInactive);
+}
+
+
+//============================================================================
+void CDockAreaTitleBar::contextMenuEvent(QContextMenuEvent* ev)
+{
+	ev->accept();
+	if (d->isDraggingState(DraggingFloatingWidget))
 	{
 		return;
 	}
@@ -406,11 +652,27 @@ void CDockAreaTitleBar::showContextMenu(const QPoint& pos)
 	Action = Menu.addAction(tr("Close Area"), this, SLOT(onCloseButtonClicked()));
 	Action->setEnabled(d->DockArea->features().testFlag(CDockWidget::DockWidgetClosable));
 	Menu.addAction(tr("Close Other Areas"), d->DockArea, SLOT(closeOtherAreas()));
-	Menu.exec(mapToGlobal(pos));
+	Menu.exec(ev->globalPos());
+}
+
+
+//============================================================================
+void CDockAreaTitleBar::insertWidget(int index, QWidget *widget)
+{
+	d->Layout->insertWidget(index, widget);
+}
+
+
+//============================================================================
+int CDockAreaTitleBar::indexOf(QWidget *widget) const
+{
+	return d->Layout->indexOf(widget);
 }
 
 
 } // namespace ads
+
+#include "DockAreaTitleBar.moc"
 
 //---------------------------------------------------------------------------
 // EOF DockAreaTitleBar.cpp
