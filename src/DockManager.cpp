@@ -58,7 +58,7 @@
 
 namespace ads
 {
-static CDockManager::ConfigFlags StaticConfigFlags = CDockManager::DefaultOpaqueConfig;
+static CDockManager::ConfigFlags StaticConfigFlags = CDockManager::DefaultNonOpaqueConfig;
 
 /**
  * Private data class of CDockManager class (pimpl)
@@ -440,6 +440,7 @@ CDockManager::~CDockManager()
 void CDockManager::registerFloatingWidget(CFloatingDockContainer* FloatingWidget)
 {
 	d->FloatingWidgets.append(FloatingWidget);
+	emit floatingWidgetCreated(FloatingWidget);
     ADS_PRINT("d->FloatingWidgets.count() " << d->FloatingWidgets.count());
 }
 

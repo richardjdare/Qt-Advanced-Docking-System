@@ -40,6 +40,7 @@ struct FloatingDragPreviewPrivate
 	qreal WindowOpacity;
 	bool Hidden = false;
 	QPixmap ContentPreviewPixmap;
+	bool Canceled = false;
 
 
 	/**
@@ -59,6 +60,7 @@ struct FloatingDragPreviewPrivate
 	 */
 	void cancelDragging()
 	{
+		Canceled = true;
 		emit _this->draggingCanceled();
 		DockManager->containerOverlay()->hideOverlay();
 		DockManager->dockAreaOverlay()->hideOverlay();
@@ -84,11 +86,6 @@ void FloatingDragPreviewPrivate::updateDropOverlays(const QPoint &GlobalPos)
 		{
 			continue;
 		}
-
-		/*if (DockContainer == ContainerWidget)
-		{
-			continue;
-		}*/
 
 		QPoint MappedPos = ContainerWidget->mapFromGlobal(GlobalPos);
 		if (ContainerWidget->rect().contains(MappedPos))
@@ -207,9 +204,9 @@ CFloatingDragPreview::CFloatingDragPreview(QWidget* Content, QWidget* parent) :
 	connect(qApp, SIGNAL(applicationStateChanged(Qt::ApplicationState)),
 		SLOT(onApplicationStateChanged(Qt::ApplicationState)));
 
-	// We need to install an event filter for the given Content
-	// widget to receive the escape key press
-	Content->installEventFilter(this);
+	// The only safe way to receive escape key presses is to install an event
+	// filter for the application object
+	qApp->installEventFilter(this);
 }
 
 
@@ -291,25 +288,33 @@ void CFloatingDragPreview::finishDragging()
 	else
 	{
 		CDockWidget* DockWidget = qobject_cast<CDockWidget*>(d->Content);
-		CFloatingDockContainer* FloatingWidget;
-		if (DockWidget)
+		CFloatingDockContainer* FloatingWidget = nullptr;
+
+		if (DockWidget && DockWidget->features().testFlag(CDockWidget::DockWidgetFloatable))
 		{
 			FloatingWidget = new CFloatingDockContainer(DockWidget);
 		}
 		else
 		{
 			CDockAreaWidget* DockArea = qobject_cast<CDockAreaWidget*>(d->Content);
-			FloatingWidget = new CFloatingDockContainer(DockArea);
+			if (DockArea->features().testFlag(CDockWidget::DockWidgetFloatable))
+			{
+				FloatingWidget = new CFloatingDockContainer(DockArea);
+			}
 		}
-		FloatingWidget->setGeometry(this->geometry());
-		FloatingWidget->show();
-		if (!CDockManager::configFlags().testFlag(CDockManager::DragPreviewHasWindowFrame))
+
+		if (FloatingWidget)
 		{
-			QApplication::processEvents();
-			int FrameHeight = FloatingWidget->frameGeometry().height() - FloatingWidget->geometry().height();
-			QRect FixedGeometry = this->geometry();
-			FixedGeometry.adjust(0, FrameHeight, 0, 0);
-			FloatingWidget->setGeometry(FixedGeometry);
+			FloatingWidget->setGeometry(this->geometry());
+			FloatingWidget->show();
+			if (!CDockManager::configFlags().testFlag(CDockManager::DragPreviewHasWindowFrame))
+			{
+				QApplication::processEvents();
+				int FrameHeight = FloatingWidget->frameGeometry().height() - FloatingWidget->geometry().height();
+				QRect FixedGeometry = this->geometry();
+				FixedGeometry.adjust(0, FrameHeight, 0, 0);
+				FloatingWidget->setGeometry(FixedGeometry);
+			}
 		}
 	}
 
@@ -368,19 +373,18 @@ void CFloatingDragPreview::onApplicationStateChanged(Qt::ApplicationState state)
 bool CFloatingDragPreview::eventFilter(QObject *watched, QEvent *event)
 {
 	Q_UNUSED(watched);
-    if (event->type() == QEvent::KeyPress)
+    if (!d->Canceled && event->type() == QEvent::KeyPress)
     {
         QKeyEvent* e = static_cast<QKeyEvent*>(event);
         if (e->key() == Qt::Key_Escape)
         {
-            d->Content->removeEventFilter(this);
+            watched->removeEventFilter(this);
             d->cancelDragging();
         }
     }
 
     return false;
 }
-
 
 
 

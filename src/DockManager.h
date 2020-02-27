@@ -142,6 +142,7 @@ public:
 	/**
 	 * These global configuration flags configure some global dock manager
 	 * settings.
+	 * Set the dock manager flags, before you create the dock manager instance.
 	 */
 	enum eConfigFlag
 	{
@@ -209,12 +210,14 @@ public:
 
 	/**
 	 * Sets the global configuration flags for the whole docking system.
-	 * Call this function before you create your first dock widget.
+	 * Call this function before you create the dock manager and before
+	 * your create the first dock widget.
 	 */
 	static void setConfigFlags(const ConfigFlags Flags);
 
 	/**
-	 * Set a certain config flag
+	 * Set a certain config flag.
+	 * \see setConfigFlags()
 	 */
 	static void setConfigFlag(eConfigFlag Flag, bool On = true);
 
@@ -450,9 +453,16 @@ signals:
 
     /**
      * This signal is emitted if the dock manager finished opening a
-     * perspective
+     * perspective.
      */
     void perspectiveOpened(const QString& PerspectiveName);
+
+	/**
+	 * This signal is emitted, if a new floating widget has been created.
+	 * An application can use this signal to e.g. subscribe to events of
+	 * the newly created window.
+	 */
+	void floatingWidgetCreated(CFloatingDockContainer* FloatingWidget);
 
     /**
      * This signal is emitted, if a new DockArea has been created.
