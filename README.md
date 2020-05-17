@@ -51,8 +51,10 @@ of his docking system project.
   - [QtitanDocking](#qtitandocking)
 - [Donation](#donation)
 - [Showcase](#showcase)
+  - [Qt Creator IDE](#qt-creator-ide)
   - [Qt Design Studio](#qt-design-studio)
   - [QmixElements](#qmixelements)
+  - [ezEditor](#ezeditor)
 
 ### Docking everywhere - no central widget
 
@@ -281,6 +283,13 @@ If this project help you reduce time to develop or if you just like it, you can 
 
 ## Showcase
 
+### [Qt Creator IDE](https://www.qt.io/development-tools)
+
+From version 4.12 on, Qt Creator uses the Advanced Docking Framework for its
+Qt Quick Designer. This improves the usability when using multiple screens.
+
+![Qt Creator](doc/qtcreator.png)
+
 ### [Qt Design Studio](https://www.qt.io/ui-design-tools)
 
 Taken from the [Qt Blog](https://www.qt.io/blog/qt-design-studio-1.5-beta-released):
@@ -296,3 +305,11 @@ plugin-based and modular laboratory automation software for controlling CETONI d
 Advanced Docking System in the QmixElements sofware.
 
 ![QmixElements](doc/qmix_elements.png)
+
+### [ezEditor](https://github.com/ezEngine/ezEngine)
+
+The ezEditor is a full blown graphical editor used for editing scenes and
+importing and authoring assets for the [ezEngine](https://github.com/ezEngine/ezEngine) -
+an open source C++ game engine in active development.
+
+![ezEditor](doc/ezEngine_editor.png)

@@ -34,8 +34,8 @@
 
 #include "ads_globals.h"
 
-class QToolBar;
-class QXmlStreamWriter;
+QT_FORWARD_DECLARE_CLASS(QToolBar)
+QT_FORWARD_DECLARE_CLASS(QXmlStreamWriter)
 
 namespace ads
 {
@@ -147,8 +147,8 @@ public:
 
     enum DockWidgetFeature
     {
-        DockWidgetClosable = 0x01,
-        DockWidgetMovable = 0x02,///< this feature is not properly implemented yet and is ignored
+        DockWidgetClosable = 0x01,///< dock widget has a close button
+        DockWidgetMovable = 0x02,///< dock widget is movable and can be moved to a new position in the current dock container
         DockWidgetFloatable = 0x04,
         DockWidgetDeleteOnClose = 0x08, ///< deletes the dock widget when it is closed
         CustomCloseHandling = 0x10,

@@ -68,6 +68,7 @@ struct FloatingDockContainerPrivate
 	CDockContainerWidget *DropContainer = nullptr;
 	CDockAreaWidget *SingleDockArea = nullptr;
 	QPoint DragStartPos;
+	bool Hiding = false;
 #ifdef Q_OS_LINUX
     QWidget* MouseEventHandler = nullptr;
     CFloatingWidgetTitleBar* TitleBar = nullptr;
@@ -169,14 +170,14 @@ void FloatingDockContainerPrivate::titleMouseReleaseEvent()
 	    || DockManager->containerOverlay()->dropAreaUnderCursor()
 	        != InvalidDockWidgetArea)
 	{
-		// Resize the floating widget to the size of the highlighted drop area
-		// rectangle
 		CDockOverlay *Overlay = DockManager->containerOverlay();
 		if (!Overlay->dropOverlayRect().isValid())
 		{
 			Overlay = DockManager->dockAreaOverlay();
 		}
 
+		// Resize the floating widget to the size of the highlighted drop area
+		// rectangle
 		QRect Rect = Overlay->dropOverlayRect();
 		int FrameWidth = (_this->frameSize().width() - _this->rect().width())
 		    / 2;
@@ -455,6 +456,7 @@ void CFloatingDockContainer::hideEvent(QHideEvent *event)
         return;
     }
 
+    d->Hiding = true;
 	for (auto DockArea : d->DockContainer->openedDockAreas())
 	{
 		for (auto DockWidget : DockArea->openedDockWidgets())
@@ -462,6 +464,7 @@ void CFloatingDockContainer::hideEvent(QHideEvent *event)
 			DockWidget->toggleView(false);
 		}
 	}
+	d->Hiding = false;
 }
 
 //============================================================================
@@ -652,11 +655,22 @@ void CFloatingDockContainer::onDockAreasAddedOrRemoved()
 //============================================================================
 void CFloatingDockContainer::updateWindowTitle()
 {
+	// If this floating container will be hidden, then updating the window
+	// tile is not required anymore
+	if (d->Hiding)
+	{
+		return;
+	}
+
+
 	auto TopLevelDockArea = d->DockContainer->topLevelDockArea();
 	if (TopLevelDockArea)
 	{
 		CDockWidget* CurrentWidget = TopLevelDockArea->currentDockWidget();
-		d->reflectCurrentWidget(CurrentWidget);
+		if (CurrentWidget)
+		{
+			d->reflectCurrentWidget(CurrentWidget);
+		}
 	}
 	else
 	{

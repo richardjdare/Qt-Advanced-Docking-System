@@ -50,6 +50,7 @@ set(ads_INSTALL_INCLUDE
     src/ads_globals.h
     src/DockAreaTabBar.h
     src/DockAreaTitleBar.h
+	src/DockAreaTitleBar_p.h
     src/DockAreaWidget.h
     src/DockContainerWidget.h
     src/DockManager.h
@@ -123,7 +124,8 @@ set_target_properties(qtadvanceddocking PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${ads_PlatformDir}/bin"
 )
 if(BUILD_EXAMPLES)
-    add_subdirectory(example)
+    add_subdirectory(examples/simple)
+    add_subdirectory(examples/sidebar)
     add_subdirectory(demo)
 endif()
 
