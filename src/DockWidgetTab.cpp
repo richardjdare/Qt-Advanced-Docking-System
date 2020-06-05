@@ -28,7 +28,7 @@
 //============================================================================
 //                                   INCLUDES
 //============================================================================
-#include <FloatingDragPreview.h>
+#include "FloatingDragPreview.h"
 #include "ElidingLabel.h"
 #include "DockWidgetTab.h"
 
@@ -570,7 +570,7 @@ void CDockWidgetTab::mouseDoubleClickEvent(QMouseEvent *event)
 void CDockWidgetTab::setVisible(bool visible)
 {
 	// Just here for debugging to insert debug output
-	Super::setVisible(visible);
+    Super::setVisible(visible);
 }
 
 

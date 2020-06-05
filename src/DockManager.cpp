@@ -60,7 +60,7 @@
  * name. Normally, when resources are built as part of the application, the
  * resources are loaded automatically at startup. The Q_INIT_RESOURCE() macro
  * is necessary on some platforms for resources stored in a static library.
- * Because GCC caues a linker error if we put Q_INIT_RESOURCE into the
+ * Because GCC causes a linker error if we put Q_INIT_RESOURCE into the
  * loadStyleSheet() function, we place it into a function outside of the ads
  * namespace
  */
@@ -72,6 +72,16 @@ static void initResource()
 
 namespace ads
 {
+/**
+ * Internal file version in case the structure changes internally
+ */
+enum eStateFileVersion
+{
+	InitialVersion = 0,      //!< InitialVersion
+	Version1 = 1,            //!< Version1
+	CurrentVersion = Version1//!< CurrentVersion
+};
+
 static CDockManager::ConfigFlags StaticConfigFlags = CDockManager::DefaultNonOpaqueConfig;
 
 /**
@@ -239,8 +249,20 @@ bool DockManagerPrivate::restoreStateFromXml(const QByteArray &state,  int versi
     {
     	return false;
     }
-
     s.setFileVersion(v);
+
+    ADS_PRINT(s.attributes().value("UserVersion"));
+    // Older files do not support UserVersion but we still want to load them so
+    // we first test if the attribute exists
+    if (!s.attributes().value("UserVersion").isEmpty())
+    {
+		v = s.attributes().value("UserVersion").toInt(&ok);
+		if (!ok || v != version)
+		{
+			return false;
+		}
+    }
+
     bool Result = true;
 #ifdef ADS_DEBUG_PRINT
     int  DockContainers = s.attributes().value("Containers").toInt();
@@ -528,7 +550,8 @@ QByteArray CDockManager::saveState(int version) const
 	s.setAutoFormatting(ConfigFlags.testFlag(XmlAutoFormattingEnabled));
     s.writeStartDocument();
 		s.writeStartElement("QtAdvancedDockingSystem");
-		s.writeAttribute("Version", QString::number(version));
+		s.writeAttribute("Version", QString::number(CurrentVersion));
+		s.writeAttribute("UserVersion", QString::number(version));
 		s.writeAttribute("Containers", QString::number(d->Containers.count()));
 		for (auto Container : d->Containers)
 		{
