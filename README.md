@@ -7,26 +7,28 @@
 [What's new](https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System/releases/latest) •
 [Documentation](doc/user-guide.md)
 
-Qt Advanced Docking System lets you create customizable layouts using a full 
-featured window docking system similar to what is found in many popular 
-integrated development environments (IDEs) such as Visual Studio. 
+Qt Advanced Docking System lets you create customizable layouts using a full
+featured window docking system similar to what is found in many popular
+integrated development environments (IDEs) such as Visual Studio.
 
 [![Video Advanced Docking](doc/advanced-docking_video.png)](https://www.youtube.com/watch?v=7pdNfafg3Qc)
 
-Everything is implemented with standard Qt functionality without any
-platform specific code. Basic usage of QWidgets and QLayouts and using basic 
-styles as much as possible.
+## New and Noteworthy
 
-This work is based on and inspired by the 
-[Advanced Docking System for Qt](https://github.com/mfreiholz/Qt-Advanced-Docking-System) 
-from Manuel Freiholz. I did an almost complete rewrite of his code to improve
-code quality, readibility and to fix all issues from the issue tracker 
-of his docking system project.
+The [release 3.5.0](https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System/releases/tag/3.5.0)
+adds the new [focus highlighting](doc/user-guide.md#focushighlighting) feature.
+This optional feature enables highlighting of the focused dock widget like you
+know it from Visual Studio.
+
+![FocusHighlighting](doc/cfg_flag_FocusHighlighting.gif)
+
+ [learn more...](doc/user-guide.md#focushighlighting)
 
 ## Features
 
 ### Overview
 
+- [New and Noteworthy](#new-and-noteworthy)
 - [Features](#features)
   - [Overview](#overview)
   - [Docking everywhere - no central widget](#docking-everywhere---no-central-widget)
@@ -38,6 +40,7 @@ of his docking system project.
   - [Tab-menu for easy handling of many tabbed dock widgets](#tab-menu-for-easy-handling-of-many-tabbed-dock-widgets)
   - [Many different ways to detach dock widgets](#many-different-ways-to-detach-dock-widgets)
   - [Supports deletion of dynamically created dock widgets](#supports-deletion-of-dynamically-created-dock-widgets)
+  - [Python PyQt5 Bindings](#python-pyqt5-bindings)
 - [Tested Compatible Environments](#tested-compatible-environments)
   - [Windows](#windows)
   - [macOS](#macos)
@@ -55,6 +58,7 @@ of his docking system project.
   - [Qt Design Studio](#qt-design-studio)
   - [QmixElements](#qmixelements)
   - [ezEditor](#ezeditor)
+  - [D-Tect X](#d-tect-x)
 
 ### Docking everywhere - no central widget
 
@@ -135,6 +139,20 @@ You can detach dock widgets and also dock areas in the following ways:
 ### Supports deletion of dynamically created dock widgets
 
 Normally clicking the close button of a dock widget will just hide the widget and the user can show it again using the toggleView() action of the dock widget. This is meant for user interfaces with a static amount of widgets. But the advanced docking system also supports dynamic dock widgets that will get deleted on close. If you set the dock widget flag `DockWidgetDeleteOnClose` for a certain dock widget, then it will be deleted as soon as you close this dock widget. This enables the implementation of user interfaces with dynamically created editors, like in word processing applications or source code development tools.
+
+### Python PyQt5 Bindings
+
+![Python Logo](doc/python_logo.png)
+
+The Advanced Docking System comes with a complete Python integration based on
+PyQt5 bindings. The package is available via [conda-forge](https://github.com/conda-forge/pyqtads-feedstock). The python integration has been contributed to this project
+by the following people:
+
+- [n-elie](https://github.com/n-elie)
+- [Hugo Slepicka](https://github.com/hhslepicka)
+- [K Lauer](https://github.com/klauer)
+
+Latest working version: [3.5.2](https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System/releases/tag/3.5.2)
 
 ## Tested Compatible Environments
 
@@ -247,7 +265,13 @@ MainWindow::~MainWindow()
 ## Developers
 
 - Uwe Kindler, Project Maintainer
-- Manuel Freiholz 
+- Manuel Freiholz
+
+This work is based on and inspired by the 
+[Advanced Docking System for Qt](https://github.com/mfreiholz/Qt-Advanced-Docking-System)
+from Manuel Freiholz. I did an almost complete rewrite of his code to improve
+code quality, readibility and to fix all issues from the issue tracker
+of his docking system project.
 
 ## License information
 
@@ -313,3 +337,11 @@ importing and authoring assets for the [ezEngine](https://github.com/ezEngine/ez
 an open source C++ game engine in active development.
 
 ![ezEditor](doc/ezEngine_editor.png)
+
+### [D-Tect X](https://www.duerr-ndt.com/products/ndt-software/d-tect-xray-inspection-software.html)
+
+D-Tect X is a X-ray inspection software for industrial radiography. It is a state-of-the-art 64-bit application which supports GPU (Graphics Processing Unit) acceleration and takes full advantage of computers with multiple CPU cores. A large set of tools assist the user in image analysis and evaluation. Thanks to the Qt Advanced Docking System the flexible and intuitive user interface can be completely customized to  each user’s preference.
+
+[learn more...](https://www.duerr-ndt.com/products/ndt-software/d-tect-xray-inspection-software.html)
+
+![D-TectX](doc/d-tect-x.jpg)

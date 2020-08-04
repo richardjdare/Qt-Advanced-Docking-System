@@ -30,8 +30,6 @@
 //============================================================================
 #include "DockAreaWidget.h"
 
-#include <iostream>
-
 #include <QStackedLayout>
 #include <QScrollBar>
 #include <QScrollArea>
@@ -135,6 +133,10 @@ public:
 			}
 			m_CurrentWidget = nullptr;
 			m_CurrentIndex = -1;
+		}
+		else if (indexOf(Widget) < m_CurrentIndex)
+		{
+			--m_CurrentIndex;
 		}
 		m_Widgets.removeOne(Widget);
 	}
@@ -247,6 +249,7 @@ struct DockAreaWidgetPrivate
 	CDockManager*		DockManager		= nullptr;
 	bool UpdateTitleBarButtons = false;
 	DockWidgetAreas		AllowedAreas	= AllDockAreas;
+	bool HideSingleWidgetTitleBar		= false;
 	QSize MinSizeHint;
 
 	/**
@@ -413,6 +416,7 @@ void CDockAreaWidget::insertDockWidget(int index, CDockWidget* DockWidget,
 	bool Activate)
 {
 	d->ContentsLayout->insertWidget(index, DockWidget);
+	DockWidget->setDockArea(this);
 	DockWidget->tabWidget()->setDockAreaWidget(this);
 	auto TabWidget = DockWidget->tabWidget();
 	// Inserting the tab will change the current index which in turn will
@@ -428,7 +432,6 @@ void CDockAreaWidget::insertDockWidget(int index, CDockWidget* DockWidget,
 	{
 		setCurrentIndex(index);
 	}
-	DockWidget->setDockArea(this);
 	// If this dock area is hidden, then we need to make it visible again
 	// by calling DockWidget->toggleViewInternal(true);
 	if (!this->isVisible() && d->ContentsLayout->count() > 1 && !dockManager()->isRestoringState())
@@ -443,12 +446,15 @@ void CDockAreaWidget::insertDockWidget(int index, CDockWidget* DockWidget,
 void CDockAreaWidget::removeDockWidget(CDockWidget* DockWidget)
 {
     ADS_PRINT("CDockAreaWidget::removeDockWidget");
-	auto NextOpenDockWidget = nextOpenDockWidget(DockWidget);
+    auto CurrentDockWidget = currentDockWidget();
+  	auto NextOpenDockWidget = (DockWidget == CurrentDockWidget) ? nextOpenDockWidget(DockWidget) : nullptr;
 
 	d->ContentsLayout->removeWidget(DockWidget);
 	auto TabWidget = DockWidget->tabWidget();
 	TabWidget->hide();
 	d->tabBar()->removeTab(TabWidget);
+	TabWidget->setParent(DockWidget);
+	DockWidget->setDockArea(nullptr);
 	CDockContainerWidget* DockContainer = dockContainer();
 	if (NextOpenDockWidget)
 	{
@@ -460,7 +466,7 @@ void CDockAreaWidget::removeDockWidget(CDockWidget* DockWidget)
 		DockContainer->removeDockArea(this);
 		this->deleteLater();
 	}
-	else
+	else if (DockWidget == CurrentDockWidget)
 	{
 		// if contents layout is not empty but there are no more open dock
 		// widgets, then we need to hide the dock area because it does not
@@ -731,7 +737,7 @@ void CDockAreaWidget::updateTitleBarVisibility()
 		return;
 	}
 
-    if (CDockManager::configFlags().testFlag(CDockManager::AlwaysShowTabs))
+    if (CDockManager::testConfigFlag(CDockManager::AlwaysShowTabs))
     {
         return;
     }
@@ -739,7 +745,8 @@ void CDockAreaWidget::updateTitleBarVisibility()
 	if (d->TitleBar)
 	{
 		bool Hidden = Container->hasTopLevelDockWidget() && (Container->isFloating()
-			|| CDockManager::configFlags().testFlag(CDockManager::HideSingleCentralWidgetTitleBar));
+			|| CDockManager::testConfigFlag(CDockManager::HideSingleCentralWidgetTitleBar));
+		Hidden |= (d->HideSingleWidgetTitleBar && openDockWidgetsCount() == 1);
 		d->TitleBar->setVisible(!Hidden);
 	}
 }
@@ -843,15 +850,27 @@ void CDockAreaWidget::setVisible(bool Visible)
 	}
 }
 
+
+//============================================================================
 void CDockAreaWidget::setAllowedAreas(DockWidgetAreas areas)
 {
 	d->AllowedAreas = areas;
 }
 
+
+//============================================================================
 DockWidgetAreas CDockAreaWidget::allowedAreas() const
 {
 	return d->AllowedAreas;
 }
+
+//============================================================================
+void CDockAreaWidget::setHideSingleWidgetTitleBar(bool hide)
+{
+	d->HideSingleWidgetTitleBar = hide;
+	updateTitleBarVisibility();
+}
+
 
 //============================================================================
 QAbstractButton* CDockAreaWidget::titleBarButton(TitleBarButton which) const

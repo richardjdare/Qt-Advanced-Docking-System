@@ -193,7 +193,7 @@ public:
 	bool isInFrontOf(CDockContainerWidget* Other) const;
 
 	/**
-	 * Returns the dock area at teh given global position or 0 if there is no
+	 * Returns the dock area at the given global position or 0 if there is no
 	 * dock area at this position
 	 */
 	CDockAreaWidget* dockAreaAt(const QPoint& GlobalPos) const;
@@ -276,7 +276,7 @@ signals:
 	 * This signal is emitted if a dock area is opened or closed via
 	 * toggleView() function
 	 */
-	void dockAreaViewToggled(CDockAreaWidget* DockArea, bool Open);
+	void dockAreaViewToggled(ads::CDockAreaWidget* DockArea, bool Open);
 }; // class DockContainerWidget
 } // namespace ads
 //-----------------------------------------------------------------------------

@@ -134,6 +134,7 @@ void DockWidgetPrivate::showDockWidget()
 	{
 		CFloatingDockContainer* FloatingWidget = new CFloatingDockContainer(_this);
 		FloatingWidget->resize(_this->size());
+		TabWidget->show();
 		FloatingWidget->show();
 	}
 	else
@@ -235,6 +236,11 @@ CDockWidget::CDockWidget(const QString &title, QWidget *parent) :
 	connect(d->ToggleViewAction, SIGNAL(triggered(bool)), this,
 		SLOT(toggleView(bool)));
 	setToolbarFloatingStyle(false);
+
+	if (CDockManager::testConfigFlag(CDockManager::FocusHighlighting))
+	{
+		setFocusPolicy(Qt::ClickFocus);
+	}
 }
 
 //============================================================================

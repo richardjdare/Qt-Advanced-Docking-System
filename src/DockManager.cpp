@@ -53,6 +53,12 @@
 #include "DockAreaWidget.h"
 #include "IconProvider.h"
 #include "DockingStateReader.h"
+#include "DockAreaTitleBar.h"
+#include "DockFocusController.h"
+
+#ifdef Q_OS_LINUX
+#include "linux/FloatingWidgetTitleBar.h"
+#endif
 
 
 /**
@@ -101,6 +107,7 @@ struct DockManagerPrivate
 	CDockManager::eViewMenuInsertionOrder MenuInsertionOrder = CDockManager::MenuAlphabeticallySorted;
 	bool RestoringState = false;
 	QVector<CFloatingDockContainer*> UninitializedFloatingWidgets;
+	CDockFocusController* FocusController = nullptr;
 
 	/**
 	 * Private data constructor
@@ -174,11 +181,14 @@ void DockManagerPrivate::loadStylesheet()
 {
 	initResource();
 	QString Result;
+	QString FileName = ":ads/stylesheets/";
+	FileName += CDockManager::testConfigFlag(CDockManager::FocusHighlighting)
+		? "focus_highlighting" : "default";
 #ifdef Q_OS_LINUX
-    QFile StyleSheetFile(":ads/stylesheets/default_linux.css");
-#else
-	QFile StyleSheetFile(":ads/stylesheets/default.css");
+    FileName += "_linux";
 #endif
+    FileName += ".css";
+	QFile StyleSheetFile(FileName);
 	StyleSheetFile.open(QIODevice::ReadOnly);
 	QTextStream StyleSheetStream(&StyleSheetFile);
 	Result = StyleSheetStream.readAll();
@@ -459,6 +469,11 @@ CDockManager::CDockManager(QWidget *parent) :
 	d->ContainerOverlay = new CDockOverlay(this, CDockOverlay::ModeContainerOverlay);
 	d->Containers.append(this);
 	d->loadStylesheet();
+
+	if (CDockManager::testConfigFlag(CDockManager::FocusHighlighting))
+	{
+		d->FocusController = new CDockFocusController(this);
+	}
 }
 
 //============================================================================
@@ -593,12 +608,11 @@ bool CDockManager::restoreState(const QByteArray &state, int version)
 	emit restoringState();
 	bool Result = d->restoreState(state, version);
 	d->RestoringState = false;
-	emit stateRestored();
 	if (!IsHidden)
 	{
 		show();
 	}
-
+	emit stateRestored();
 	return Result;
 }
 
@@ -694,6 +708,7 @@ void CDockManager::removeDockWidget(CDockWidget* Dockwidget)
 	emit dockWidgetAboutToBeRemoved(Dockwidget);
 	d->DockWidgetsMap.remove(Dockwidget->objectName());
 	CDockContainerWidget::removeDockWidget(Dockwidget);
+	Dockwidget->setDockManager(nullptr);
 	emit dockWidgetRemoved(Dockwidget);
 }
 
@@ -892,6 +907,36 @@ CIconProvider& CDockManager::iconProvider()
 {
 	static CIconProvider Instance;
 	return Instance;
+}
+
+
+//===========================================================================
+void CDockManager::notifyWidgetOrAreaRelocation(QWidget* DroppedWidget)
+{
+	if (d->FocusController)
+	{
+		d->FocusController->notifyWidgetOrAreaRelocation(DroppedWidget);
+	}
+}
+
+
+//===========================================================================
+void CDockManager::notifyFloatingWidgetDrop(CFloatingDockContainer* FloatingWidget)
+{
+	if (d->FocusController)
+	{
+		d->FocusController->notifyFloatingWidgetDrop(FloatingWidget);
+	}
+}
+
+
+//===========================================================================
+void CDockManager::setDockWidgetFocused(CDockWidget* DockWidget)
+{
+	if (d->FocusController)
+	{
+		d->FocusController->setDockWidgetFocused(DockWidget);
+	}
 }
 
 
