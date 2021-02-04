@@ -2,7 +2,7 @@ ADS_OUT_ROOT = $${OUT_PWD}/../..
 
 QT       += core gui widgets
 
-TARGET = CentralWidgetExample
+TARGET = EmptyDockareaExample
 DESTDIR = $${ADS_OUT_ROOT}/lib
 TEMPLATE = app
 CONFIG += c++14

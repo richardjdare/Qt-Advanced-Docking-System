@@ -55,6 +55,7 @@
 #include "DockingStateReader.h"
 #include "DockAreaTitleBar.h"
 #include "DockFocusController.h"
+#include "DockSplitter.h"
 
 #ifdef Q_OS_LINUX
 #include "linux/FloatingWidgetTitleBar.h"
@@ -249,7 +250,7 @@ bool DockManagerPrivate::restoreStateFromXml(const QByteArray &state,  int versi
     }
     CDockingStateReader s(state);
     s.readNextStartElement();
-    if (s.name() != "QtAdvancedDockingSystem")
+    if (s.name() != QLatin1String("QtAdvancedDockingSystem"))
     {
     	return false;
     }
@@ -303,7 +304,7 @@ bool DockManagerPrivate::restoreStateFromXml(const QByteArray &state,  int versi
     int DockContainerCount = 0;
     while (s.readNextStartElement())
     {
-    	if (s.name() == "Container")
+        if (s.name() == QLatin1String("Container"))
     	{
     		Result = restoreContainer(DockContainerCount, s, Testing);
 			if (!Result)
@@ -342,7 +343,7 @@ void DockManagerPrivate::restoreDockWidgetsOpenState()
     	if (DockWidget->property(internal::DirtyProperty).toBool())
     	{
     		DockWidget->flagAsUnassigned();
-            emit DockWidget->viewToggled(false);
+            Q_EMIT DockWidget->viewToggled(false);
     	}
     	else
     	{
@@ -581,7 +582,7 @@ bool CDockManager::eventFilter(QObject *obj, QEvent *e)
 void CDockManager::registerFloatingWidget(CFloatingDockContainer* FloatingWidget)
 {
 	d->FloatingWidgets.append(FloatingWidget);
-	emit floatingWidgetCreated(FloatingWidget);
+	Q_EMIT floatingWidgetCreated(FloatingWidget);
     ADS_PRINT("d->FloatingWidgets.count() " << d->FloatingWidgets.count());
 }
 
@@ -698,14 +699,14 @@ bool CDockManager::restoreState(const QByteArray &state, int version)
 		hide();
 	}
 	d->RestoringState = true;
-	emit restoringState();
+	Q_EMIT restoringState();
 	bool Result = d->restoreState(state, version);
 	d->RestoringState = false;
 	if (!IsHidden)
 	{
 		show();
 	}
-	emit stateRestored();
+	Q_EMIT stateRestored();
 	return Result;
 }
 
@@ -731,7 +732,7 @@ CFloatingDockContainer* CDockManager::addDockWidgetFloating(CDockWidget* Dockwid
 	{
 		d->UninitializedFloatingWidgets.append(FloatingWidget);
 	}
-	emit dockWidgetAdded(Dockwidget);
+	Q_EMIT dockWidgetAdded(Dockwidget);
 	return FloatingWidget;
 }
 
@@ -758,8 +759,9 @@ CDockAreaWidget* CDockManager::addDockWidget(DockWidgetArea area,
 	CDockWidget* Dockwidget, CDockAreaWidget* DockAreaWidget)
 {
 	d->DockWidgetsMap.insert(Dockwidget->objectName(), Dockwidget);
-	auto AreaOfAddedDockWidget = CDockContainerWidget::addDockWidget(area, Dockwidget, DockAreaWidget);
-	emit dockWidgetAdded(Dockwidget);
+	auto Container = DockAreaWidget ? DockAreaWidget->dockContainer(): this;
+	auto AreaOfAddedDockWidget = Container->addDockWidget(area, Dockwidget, DockAreaWidget);
+	Q_EMIT dockWidgetAdded(Dockwidget);
 	return AreaOfAddedDockWidget;
 }
 
@@ -801,11 +803,11 @@ CDockWidget* CDockManager::findDockWidget(const QString& ObjectName) const
 //============================================================================
 void CDockManager::removeDockWidget(CDockWidget* Dockwidget)
 {
-	emit dockWidgetAboutToBeRemoved(Dockwidget);
+	Q_EMIT dockWidgetAboutToBeRemoved(Dockwidget);
 	d->DockWidgetsMap.remove(Dockwidget->objectName());
 	CDockContainerWidget::removeDockWidget(Dockwidget);
 	Dockwidget->setDockManager(nullptr);
-	emit dockWidgetRemoved(Dockwidget);
+	Q_EMIT dockWidgetRemoved(Dockwidget);
 }
 
 //============================================================================
@@ -819,7 +821,7 @@ QMap<QString, CDockWidget*> CDockManager::dockWidgetsMap() const
 void CDockManager::addPerspective(const QString& UniquePrespectiveName)
 {
 	d->Perspectives.insert(UniquePrespectiveName, saveState());
-	emit perspectiveListChanged();
+	Q_EMIT perspectiveListChanged();
 }
 
 
@@ -841,8 +843,8 @@ void CDockManager::removePerspectives(const QStringList& Names)
 
 	if (Count)
 	{
-		emit perspectivesRemoved();
-		emit perspectiveListChanged();
+		Q_EMIT perspectivesRemoved();
+		Q_EMIT perspectiveListChanged();
 	}
 }
 
@@ -863,9 +865,9 @@ void CDockManager::openPerspective(const QString& PerspectiveName)
 		return;
 	}
 
-	emit openingPerspective(PerspectiveName);
+	Q_EMIT openingPerspective(PerspectiveName);
 	restoreState(Iterator.value());
-	emit perspectiveOpened(PerspectiveName);
+	Q_EMIT perspectiveOpened(PerspectiveName);
 }
 
 
@@ -1093,6 +1095,34 @@ CDockWidget* CDockManager::focusedDockWidget() const
 	}
 }
 
+//===========================================================================
+QList<int> CDockManager::splitterSizes(CDockAreaWidget *ContainedArea) const
+{
+    if (ContainedArea)
+    {
+        auto Splitter = internal::findParent<CDockSplitter*>(ContainedArea);
+        if (Splitter)
+        {
+            return Splitter->sizes();
+        }
+    }
+    return QList<int>();
+}
+
+//===========================================================================
+void CDockManager::setSplitterSizes(CDockAreaWidget *ContainedArea, const QList<int>& sizes)
+{
+    if (!ContainedArea)
+    {
+        return;
+    }
+
+    auto Splitter = internal::findParent<CDockSplitter*>(ContainedArea);
+    if (Splitter && Splitter->count() == sizes.count())
+    {
+        Splitter->setSizes(sizes);
+    }
+}
 
 } // namespace ads
 

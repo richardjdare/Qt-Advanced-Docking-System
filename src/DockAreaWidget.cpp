@@ -324,7 +324,6 @@ struct DockAreaWidgetPrivate
 		}
 	}
 };
-// struct DockAreaWidgetPrivate
 
 
 //============================================================================
@@ -379,7 +378,7 @@ CDockAreaWidget::CDockAreaWidget(CDockManager* DockManager, CDockContainerWidget
 	d->ContentsLayout = new DockAreaLayout(d->Layout);
 	if (d->DockManager)
 	{
-		emit d->DockManager->dockAreaCreated(this);
+		Q_EMIT d->DockManager->dockAreaCreated(this);
 	}
 }
 
@@ -605,11 +604,11 @@ void CDockAreaWidget::setCurrentIndex(int index)
 		return;
 	}
 
-    emit currentChanging(index);
+    Q_EMIT currentChanging(index);
     TabBar->setCurrentIndex(index);
 	d->ContentsLayout->setCurrentIndex(index);
 	d->ContentsLayout->currentWidget()->show();
-	emit currentChanged(index);
+	Q_EMIT currentChanged(index);
 }
 
 
@@ -809,18 +808,49 @@ CDockWidget* CDockAreaWidget::nextOpenDockWidget(CDockWidget* DockWidget) const
 	auto OpenDockWidgets = openedDockWidgets();
 	if (OpenDockWidgets.count() > 1 || (OpenDockWidgets.count() == 1 && OpenDockWidgets[0] != DockWidget))
 	{
-		CDockWidget* NextDockWidget;
 		if (OpenDockWidgets.last() == DockWidget)
 		{
-			NextDockWidget = OpenDockWidgets[OpenDockWidgets.count() - 2];
+			CDockWidget* NextDockWidget = OpenDockWidgets[OpenDockWidgets.count() - 2];
+			// search backwards for widget with tab
+			for (int i = OpenDockWidgets.count() - 2; i >= 0; --i)
+			{
+				auto dw = OpenDockWidgets[i];
+				if (!dw->features().testFlag(CDockWidget::NoTab))
+				{
+					return dw;
+				}
+			}
+
+			// return widget without tab
+			return NextDockWidget;
 		}
 		else
 		{
-			int NextIndex = OpenDockWidgets.indexOf(DockWidget) + 1;
-			NextDockWidget = OpenDockWidgets[NextIndex];
-		}
+			int IndexOfDockWidget = OpenDockWidgets.indexOf(DockWidget);
+			CDockWidget* NextDockWidget = OpenDockWidgets[IndexOfDockWidget + 1];
+			// search forwards for widget with tab
+			for (int i = IndexOfDockWidget + 1; i < OpenDockWidgets.count(); ++i)
+			{
+				auto dw = OpenDockWidgets[i];
+				if (!dw->features().testFlag(CDockWidget::NoTab))
+				{
+					return dw;
+				}
+			}
 
-		return NextDockWidget;
+			// search backwards for widget with tab
+			for (int i = IndexOfDockWidget - 1; i >= 0; --i)
+			{
+				auto dw = OpenDockWidgets[i];
+				if (!dw->features().testFlag(CDockWidget::NoTab))
+				{
+					return dw;
+				}
+			}
+
+			// return widget without tab
+			return NextDockWidget;
+		}
 	}
 	else
 	{
@@ -858,7 +888,7 @@ void CDockAreaWidget::toggleView(bool Open)
 {
 	setVisible(Open);
 
-	emit viewToggled(Open);
+	Q_EMIT viewToggled(Open);
 }
 
 
@@ -928,17 +958,20 @@ void CDockAreaWidget::closeArea()
 	// If there is only one single dock widget and this widget has the
 	// DeleteOnClose feature, then we delete the dock widget now
 	auto OpenDockWidgets = openedDockWidgets();
-	if (OpenDockWidgets.count() == 1 && OpenDockWidgets[0]->features().testFlag(CDockWidget::DockWidgetDeleteOnClose))
+    if (OpenDockWidgets.count() == 1 && OpenDockWidgets[0]->features().testFlag(CDockWidget::DockWidgetDeleteOnClose))
 	{
 		OpenDockWidgets[0]->closeDockWidgetInternal();
 	}
-	else
+    else
 	{
-		for (auto DockWidget : openedDockWidgets())
-		{
-			DockWidget->toggleView(false);
-		}
-	}
+        for (auto DockWidget : openedDockWidgets())
+        {
+            if (DockWidget->features().testFlag(CDockWidget::DockWidgetDeleteOnClose) && DockWidget->features().testFlag(CDockWidget::DockWidgetForceCloseWithArea))
+                DockWidget->closeDockWidgetInternal();
+            else
+                DockWidget->toggleView(false);
+        }
+    }
 }
 
 
@@ -971,7 +1004,19 @@ bool CDockAreaWidget::isCentralWidgetArea() const
 //============================================================================
 QSize CDockAreaWidget::minimumSizeHint() const
 {
-	return d->MinSizeHint.isValid() ? d->MinSizeHint : Super::minimumSizeHint();
+	if (!d->MinSizeHint.isValid())
+	{
+		return Super::minimumSizeHint();
+	}
+
+	if (d->TitleBar->isVisible())
+	{
+		return d->MinSizeHint + QSize(0, d->TitleBar->minimumSizeHint().height());
+	}
+	else
+	{
+		return d->MinSizeHint;
+	}
 }
 
 

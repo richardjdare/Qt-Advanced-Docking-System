@@ -28,6 +28,8 @@
   - [`FloatingContainerForceNativeTitleBar` (Linux only)](#floatingcontainerforcenativetitlebar-linux-only)
   - [`FloatingContainerForceQWidgetTitleBar` (Linux only)](#floatingcontainerforceqwidgettitlebar-linux-only)
 - [Central Widget](#central-widget)
+- [Empty Dock Area](#empty-dock-area)
+- [Custom Close Handling](#custom-close-handling)
 - [Styling](#styling)
   - [Disabling the Internal Style Sheet](#disabling-the-internal-style-sheet)
 
@@ -499,6 +501,38 @@ See the `centralwidget` example to learn how it works.
 > are already other dock widgets registered. So `setCentralWidget` should be
 > the first function that you call when adding dock widgets.
 
+## Empty Dock Area
+
+Some applications require a fixed DockArea that is always visible, even if it
+does not contain any DockWidgets. I.e. the DockArea is in this case a kind
+of central widget that is always visible (see this
+[issue](https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System/issues/199)).
+
+Since version 3.7.1 the advanced docking system supports this feature. The
+`emptydockarea` example shows how this can be implemented with the library. You
+just need to create a dock widget and set the feature flag `CDockWidget::NoTab`.
+This permanently hides the tab widget of this area and removes it from the tab
+menu. For this special dock widget you should also disable all other features
+(movable, closable and floatable) to prevent closing and moving of this widget.
+If you use the `CDockManager::setCentralWidget` function like in the example
+code below, then you don't need to disable these features because this is done
+in the `setCentralWidget` function.
+
+```c++
+QLabel* label = new QLabel();
+label->setText("This is a DockArea which is always visible, even if it does not contain any DockWidgets.");
+label->setAlignment(Qt::AlignCenter);
+CDockWidget* CentralDockWidget = new CDockWidget("CentralWidget");
+CentralDockWidget->setWidget(label);
+CentralDockWidget->setFeature(ads::CDockWidget::NoTab, true);// set the flag before adding the widget to dock manager
+auto* CentralDockArea = DockManager->setCentralWidget(CentralDockWidget);
+```
+
+## Custom Close Handling
+
+Normally clicking the close button of a dock widget will just hide the widget and the user can show it again using the `toggleView()` action of the dock widget. This is meant for user interfaces with a static amount of widgets. But the advanced docking system also supports dynamic dock widgets that will get deleted on close. If you set the dock widget flag `DockWidgetDeleteOnClose` for a certain dock widget, then it will be deleted as soon as you close this dock widget. This enables the implementation of user interfaces with dynamically created editors, like in word processing applications or source code development tools.
+
+When an entire area is closed, the default behavior is to hide the dock widgets it contains regardless of the `DockWidgetDeleteOnClose` flag except if there is only one dock widget. In this special case, the `DockWidgetDeleteOnClose` flag is followed. This behavior can be changed by setting the `DockWidgetForceCloseWithArea` flag to all the dock widgets that needs to be closed with their area.
 
 ## Styling
 

@@ -118,7 +118,7 @@ private:
 	friend class CDockAreaWidget;
     friend class CFloatingWidgetTitleBar;
 
-private slots:
+private Q_SLOTS:
 	void onDockAreasAddedOrRemoved();
 	void onDockAreaCurrentChanged(int Index);
 
@@ -194,7 +194,11 @@ protected: // reimplements QWidget
 	/**
 	 * Native event filter for handling WM_MOVING messages on Windows
 	 */
-	virtual bool nativeEvent(const QByteArray &eventType, void *message, long *result) override;
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
+    virtual bool nativeEvent(const QByteArray &eventType, void *message, long *result) override;
+#else
+    virtual bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+#endif
 #endif
 
 

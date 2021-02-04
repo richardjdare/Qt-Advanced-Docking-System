@@ -31,6 +31,7 @@
 //                                   INCLUDES
 //============================================================================
 #include <QFrame>
+#include <QSize>
 
 #include "ads_globals.h"
 
@@ -50,6 +51,7 @@ class ADS_EXPORT CDockWidgetTab : public QFrame
 {
 	Q_OBJECT
 	Q_PROPERTY(bool activeTab READ isActiveTab WRITE setActiveTab NOTIFY activeTabChanged)
+	Q_PROPERTY(QSize iconSize READ iconSize WRITE setIconSize)
 
 private:
 	DockWidgetTabPrivate* d; ///< private data (pimpl)
@@ -58,7 +60,7 @@ private:
 	friend class CDockManager;
 	void onDockWidgetFeaturesChanged();
 
-private slots:
+private Q_SLOTS:
 	void detachDockWidget();
 
 protected:
@@ -159,10 +161,24 @@ public:
 	 */
 	void updateStyle();
 
-public slots:
+	/**
+	 * Returns the icon size.
+	 * If no explicit icon size has been set, the function returns an invalid
+	 * QSize
+	 */
+	QSize iconSize() const;
+
+	/**
+	 * Set an explicit icon size.
+	 * If no icon size has been set explicitely, than the tab sets the icon size
+	 * depending on the style
+	 */
+	void setIconSize(const QSize& Size);
+
+public Q_SLOTS:
 	virtual void setVisible(bool visible) override;
 
-signals:
+Q_SIGNALS:
 	void activeTabChanged();
 	void clicked();
 	void closeRequested();
